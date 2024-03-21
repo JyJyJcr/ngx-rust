@@ -94,7 +94,7 @@ const NGX_LINUX_ADDITIONAL_OPTS: [&str; 3] = [
     "--with-cc-opt=-g -fstack-protector-strong -Wformat -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -fPIC",
     "--with-ld-opt=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie",
 ];
-const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 9] = [
+const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 10] = [
     "DEBUG",
     "OUT_DIR",
     "ZLIB_VERSION",
@@ -104,6 +104,7 @@ const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 9] = [
     "CARGO_CFG_TARGET_OS",
     "CARGO_MANIFEST_DIR",
     "CARGO_TARGET_TMPDIR",
+    "NGX_INSTALL_DIR",
 ];
 
 /// Function invoked when `cargo build` is executed.
@@ -245,7 +246,11 @@ fn source_output_dir(cache_dir: &Path) -> PathBuf {
 fn nginx_install_dir(base_dir: &PathBuf) -> PathBuf {
     let nginx_version = env::var("NGX_VERSION").unwrap_or_else(|_| NGX_DEFAULT_VERSION.to_string());
     let platform = format!("{}-{}", env::consts::OS, env::consts::ARCH);
-    base_dir.join("nginx").join(nginx_version).join(platform)
+    env::var("NGX_INSTALL_DIR")
+        .map(PathBuf::from)
+        .unwrap_or(base_dir.clone().join("nginx"))
+        .join(nginx_version)
+        .join(platform)
 }
 
 /// Ensure the correct permissions are applied to the local gnupg directory
