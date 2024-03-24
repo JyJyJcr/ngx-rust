@@ -94,7 +94,7 @@ const NGX_LINUX_ADDITIONAL_OPTS: [&str; 3] = [
     "--with-cc-opt=-g -fstack-protector-strong -Wformat -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -fPIC",
     "--with-ld-opt=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie",
 ];
-const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 10] = [
+const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 11] = [
     "DEBUG",
     "OUT_DIR",
     "ZLIB_VERSION",
@@ -105,6 +105,7 @@ const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 10] = [
     "CARGO_MANIFEST_DIR",
     "CARGO_TARGET_TMPDIR",
     "NGX_INSTALL_DIR",
+    "CONFONLY",
 ];
 
 /// Function invoked when `cargo build` is executed.
@@ -125,7 +126,7 @@ fn main() -> Result<(), Box<dyn StdError>> {
     }
     println!("Verified GPG permissions");
     // Configure and Compile NGINX
-    let (_nginx_install_dir, nginx_src_dir) = compile_nginx()?;
+    let (_nginx_install_dir, nginx_src_dir) = compile_nginx(env::var("CONFONLY").unwrap_or("".into()) != "")?;
     // Hint cargo to rebuild if any of the these environment variables values change
     // because they will trigger a recompilation of NGINX with different parameters
     for var in ENV_VARS_TRIGGERING_RECOMPILE {
@@ -513,7 +514,7 @@ fn extract_all_archives(cache_dir: &Path, platform: &str) -> Result<Vec<(String,
 
 /// Invoke external processes to run autoconf `configure` to generate a makefile for NGINX and
 /// then run `make install`.
-fn compile_nginx() -> Result<(PathBuf, PathBuf), Box<dyn StdError>> {
+fn compile_nginx(confonly: bool) -> Result<(PathBuf, PathBuf), Box<dyn StdError>> {
     fn find_dependency_path<'a>(sources: &'a [(String, PathBuf)], name: &str) -> &'a PathBuf {
         sources
             .iter()
@@ -543,17 +544,23 @@ fn compile_nginx() -> Result<(PathBuf, PathBuf), Box<dyn StdError>> {
         false
     };
 
-    println!("NGINX already installed: {nginx_binary_exists}");
+    if !confonly {
+        println!("NGINX already installed: {nginx_binary_exists}");
+    }
     println!("NGINX autoconf makefile already created: {autoconf_makefile_exists}");
-    println!("NGINX build info changed: {}", !build_info_no_change);
+    if !confonly {
+        println!("NGINX build info changed: {}", !build_info_no_change);
+    }
 
-    if !nginx_binary_exists || !autoconf_makefile_exists || !build_info_no_change {
+    if !autoconf_makefile_exists || (!confonly && (!nginx_binary_exists || !build_info_no_change)) {
         fs::create_dir_all(&nginx_install_dir)?;
         configure(nginx_configure_flags, nginx_src_dir)?;
-        make(nginx_src_dir, "install")?;
-        let mut output = File::create(build_info_path)?;
-        // Store the configure flags of the last successful build
-        output.write_all(current_build_info.as_bytes())?;
+        if !confonly {
+            make(nginx_src_dir, "install")?;
+            let mut output = File::create(build_info_path)?;
+            // Store the configure flags of the last successful build
+            output.write_all(current_build_info.as_bytes())?;
+        }
     }
     Ok((nginx_install_dir, nginx_src_dir.to_owned()))
 }
