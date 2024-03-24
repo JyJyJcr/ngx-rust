@@ -233,19 +233,16 @@ fn gpg_path() -> Option<PathBuf> {
 }
 
 /// Returns the base path to extract tarball contents into
-fn source_output_dir(cache_dir: &Path) -> PathBuf {
-    env::var("CARGO_TARGET_TMPDIR").map(PathBuf::from).unwrap_or_else(|_| {
-        cache_dir
-            .join("src")
-            .join(format!("{}-{}", env::consts::OS, env::consts::ARCH))
-    })
+fn source_output_dir(cache_dir: &Path, platform: &str) -> PathBuf {
+    env::var("CARGO_TARGET_TMPDIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| cache_dir.join("src").join(platform))
 }
 
 #[allow(clippy::ptr_arg)]
 /// Returns the path to install NGINX to
-fn nginx_install_dir(base_dir: &PathBuf) -> PathBuf {
+fn nginx_install_dir(base_dir: &PathBuf, platform: &str) -> PathBuf {
     let nginx_version = env::var("NGX_VERSION").unwrap_or_else(|_| NGX_DEFAULT_VERSION.to_string());
-    let platform = format!("{}-{}", env::consts::OS, env::consts::ARCH);
     env::var("NGX_INSTALL_DIR")
         .map(PathBuf::from)
         .unwrap_or(base_dir.clone().join("nginx"))
@@ -498,10 +495,10 @@ fn extract_archive(
 }
 
 /// Extract all of the tarballs into subdirectories within the source base directory.
-fn extract_all_archives(cache_dir: &Path) -> Result<Vec<(String, PathBuf)>, Box<dyn StdError>> {
+fn extract_all_archives(cache_dir: &Path, platform: &str) -> Result<Vec<(String, PathBuf)>, Box<dyn StdError>> {
     let archives = all_archives();
     let mut sources = Vec::new();
-    let extract_output_base_dir = source_output_dir(cache_dir);
+    let extract_output_base_dir = source_output_dir(cache_dir, &platform);
     if !extract_output_base_dir.exists() {
         fs::create_dir_all(&extract_output_base_dir)?;
     }
@@ -524,9 +521,10 @@ fn compile_nginx() -> Result<(PathBuf, PathBuf), Box<dyn StdError>> {
             .map(|(_, p)| p)
             .unwrap_or_else(|| panic!("Unable to find dependency [{name}] path"))
     }
+    let platform = env::var("TARGET")?;
     let cache_dir = make_cache_dir()?;
-    let nginx_install_dir = nginx_install_dir(&cache_dir);
-    let sources = extract_all_archives(&cache_dir)?;
+    let nginx_install_dir = nginx_install_dir(&cache_dir, &platform);
+    let sources = extract_all_archives(&cache_dir, &platform)?;
     let zlib_src_dir = find_dependency_path(&sources, "zlib");
     let openssl_src_dir = find_dependency_path(&sources, "openssl");
     let pcre2_src_dir = find_dependency_path(&sources, "pcre2");
@@ -598,6 +596,23 @@ fn nginx_configure_flags(
     if env::var("NGX_DEBUG").map_or(false, |s| s == "true") {
         println!("Enabling --with-debug");
         nginx_opts.push("--with-debug".to_string());
+    }
+    match env::var("NGX_PLATFORM") {
+        Ok(platform) => {
+            println!("Set crossbuild platform: {}", platform);
+            nginx_opts.push(format!("--crossbuild={}", platform).to_string());
+        }
+        Err(_) => {}
+    }
+    match env::var("TARGET") {
+        Ok(target) => match env::var(format!("CC_{}", target.replace("-", "_"))) {
+            Ok(compiler) => {
+                println!("Set crossbuild compiler: CC_{}={}", target, compiler);
+                nginx_opts.push(format!("--with-cc={}", compiler).to_string());
+            }
+            Err(_) => {}
+        },
+        Err(_) => {}
     }
     if env::var("CARGO_CFG_TARGET_OS").map_or(env::consts::OS == "linux", |s| s == "linux") {
         for flag in NGX_LINUX_ADDITIONAL_OPTS {
