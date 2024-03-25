@@ -94,7 +94,7 @@ const NGX_LINUX_ADDITIONAL_OPTS: [&str; 3] = [
     "--with-cc-opt=-g -fstack-protector-strong -Wformat -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -fPIC",
     "--with-ld-opt=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie",
 ];
-const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 11] = [
+const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 12] = [
     "DEBUG",
     "OUT_DIR",
     "ZLIB_VERSION",
@@ -106,6 +106,7 @@ const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 11] = [
     "CARGO_TARGET_TMPDIR",
     "NGX_INSTALL_DIR",
     "CONFONLY",
+    "NGX_CACHE_DIR",
 ];
 
 /// Function invoked when `cargo build` is executed.
@@ -341,9 +342,11 @@ fn import_gpg_keys(cache_dir: &Path) -> Result<(), Box<dyn StdError>> {
 }
 
 fn make_cache_dir() -> Result<PathBuf, Box<dyn StdError>> {
-    let base_dir = env::var("CARGO_MANIFEST_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| env::current_dir().expect("Failed to get current directory"));
+    let base_dir = env::var("NGX_CACHE_DIR").map(PathBuf::from).unwrap_or(
+        env::var("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| env::current_dir().expect("Failed to get current directory")),
+    );
     // Choose the parent directory of the manifest directory (nginx-sys) as the cache directory
     // Fail if we do not have a parent directory
     let cache_dir = base_dir
