@@ -533,7 +533,7 @@ fn compile_nginx(confonly: bool) -> Result<(PathBuf, PathBuf), Box<dyn StdError>
     fn find_dependency_path<'a>(sources: &'a [(String, PathBuf)], name: &str) -> &'a PathBuf {
         sources
             .iter()
-            .find(|(n, _)| n == name)
+            .find(|(n, _)| n.starts_with(name))
             .map(|(_, p)| p)
             .unwrap_or_else(|| panic!("Unable to find dependency [{name}] path"))
     }
