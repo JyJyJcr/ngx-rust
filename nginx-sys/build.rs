@@ -27,6 +27,7 @@ const ZLIB_DOWNLOAD_URL_PREFIX: &str = "https://github.com/madler/zlib/releases/
 const PCRE2_DEFAULT_VERSION: &str = "10.42";
 /// Key 1: Phillip Hazel's public key. For PCRE2 10.42 and earlier
 const PCRE2_GPG_SERVER_AND_KEY_ID: (&str, &str) = (UBUNTU_KEYSEVER, "45F68D54BBE23FB3039B46E59766E084FB0F43D8");
+const PCRE_DOWNLOAD_URL_PREFIX: &str = "https://sourceforge.net/projects/pcre/files/pcre";
 const PCRE2_DOWNLOAD_URL_PREFIX: &str = "https://github.com/PCRE2Project/pcre2/releases/download";
 /// The default version of openssl to use if the `OPENSSL_VERSION` environment variable is not present
 const OPENSSL_DEFAULT_VERSION: &str = "3.2.1";
@@ -48,11 +49,13 @@ const NGX_DEFAULT_VERSION: &str = "1.24.0";
 
 /// Key 1: Konstantin Pavlov's public key. For Nginx 1.25.3 and earlier
 /// Key 2: Sergey Kandaurov's public key. For Nginx 1.25.4
+/// Key 3: Maxim Dounin's public key. At least used for Nginx 1.18.0
 const NGX_GPG_SERVER_AND_KEY_IDS: (&str, &str) = (
     UBUNTU_KEYSEVER,
     "\
 13C82A63B603576156E30A4EA0EA981B66B0D967 \
-D6786CE303D9A9022998DC6CC8464D549AF75C0A",
+D6786CE303D9A9022998DC6CC8464D549AF75C0A \
+B0F4253373F8F6F510D42178520A9993A1C052F8",
 );
 
 const NGX_DOWNLOAD_URL_PREFIX: &str = "https://nginx.org/download";
@@ -206,12 +209,21 @@ fn zlib_archive_url() -> String {
 
 fn pcre2_archive_url() -> String {
     let version = env::var("PCRE2_VERSION").unwrap_or_else(|_| PCRE2_DEFAULT_VERSION.to_string());
-    format!("{PCRE2_DOWNLOAD_URL_PREFIX}/pcre2-{version}/pcre2-{version}.tar.gz")
+    if version.chars().nth(1).is_some_and(|c| c == '.') {
+        format!("{PCRE_DOWNLOAD_URL_PREFIX}/{version}/pcre-{version}.tar.gz")
+    } else {
+        format!("{PCRE2_DOWNLOAD_URL_PREFIX}/pcre2-{version}/pcre2-{version}.tar.gz")
+    }
 }
 
 fn openssl_archive_url() -> String {
     let version = env::var("OPENSSL_VERSION").unwrap_or_else(|_| OPENSSL_DEFAULT_VERSION.to_string());
-    format!("{OPENSSL_DOWNLOAD_URL_PREFIX}/openssl-{version}/openssl-{version}.tar.gz")
+    if version.starts_with("1.1.1") {
+        let version_hyphened = version.replace(".", "_");
+        format!("{OPENSSL_DOWNLOAD_URL_PREFIX}/OpenSSL_{version_hyphened}/openssl-{version}.tar.gz")
+    } else {
+        format!("{OPENSSL_DOWNLOAD_URL_PREFIX}/openssl-{version}/openssl-{version}.tar.gz")
+    }
 }
 
 fn nginx_archive_url() -> String {
@@ -531,7 +543,7 @@ fn compile_nginx(confonly: bool) -> Result<(PathBuf, PathBuf), Box<dyn StdError>
     let sources = extract_all_archives(&cache_dir, &platform)?;
     let zlib_src_dir = find_dependency_path(&sources, "zlib");
     let openssl_src_dir = find_dependency_path(&sources, "openssl");
-    let pcre2_src_dir = find_dependency_path(&sources, "pcre2");
+    let pcre2_src_dir = find_dependency_path(&sources, "pcre");
     let nginx_src_dir = find_dependency_path(&sources, "nginx");
     let nginx_configure_flags = nginx_configure_flags(&nginx_install_dir, zlib_src_dir, openssl_src_dir, pcre2_src_dir);
     let nginx_binary_exists = nginx_install_dir.join("sbin").join("nginx").exists();
