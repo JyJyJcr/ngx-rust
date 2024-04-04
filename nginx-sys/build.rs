@@ -17,24 +17,24 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 use which::which;
 
-const UBUNTU_KEYSEVER: &str = "hkps://keyserver.ubuntu.com";
+const UBUNTU_KEYSERVER: &str = "hkps://keyserver.ubuntu.com";
 /// The default version of zlib to use if the `ZLIB_VERSION` environment variable is not present
 const ZLIB_DEFAULT_VERSION: &str = "1.3.1";
 /// Key 1: Mark Adler's public key. For zlib 1.3.1 and earlier
-const ZLIB_GPG_SERVER_AND_KEY_ID: (&str, &str) = (UBUNTU_KEYSEVER, "5ED46A6721D365587791E2AA783FCD8E58BCAFBA");
+const ZLIB_GPG_SERVER_AND_KEY_ID: (&str, &str) = (UBUNTU_KEYSERVER, "5ED46A6721D365587791E2AA783FCD8E58BCAFBA");
 const ZLIB_DOWNLOAD_URL_PREFIX: &str = "https://github.com/madler/zlib/releases/download";
 /// The default version of pcre to use if the `PCRE2_VERSION` environment variable is not present
 const PCRE1_DEFAULT_VERSION: &str = "8.45";
 const PCRE2_DEFAULT_VERSION: &str = "10.42";
 /// Key 1: Phillip Hazel's public key. For PCRE2 10.42 and earlier
-const PCRE2_GPG_SERVER_AND_KEY_ID: (&str, &str) = (UBUNTU_KEYSEVER, "45F68D54BBE23FB3039B46E59766E084FB0F43D8");
+const PCRE2_GPG_SERVER_AND_KEY_ID: (&str, &str) = (UBUNTU_KEYSERVER, "45F68D54BBE23FB3039B46E59766E084FB0F43D8");
 const PCRE1_DOWNLOAD_URL_PREFIX: &str = "https://sourceforge.net/projects/pcre/files/pcre";
 const PCRE2_DOWNLOAD_URL_PREFIX: &str = "https://github.com/PCRE2Project/pcre2/releases/download";
 /// The default version of openssl to use if the `OPENSSL_VERSION` environment variable is not present
 const OPENSSL1_DEFAULT_VERSION: &str = "1.1.1w";
 const OPENSSL3_DEFAULT_VERSION: &str = "3.2.1";
 const OPENSSL_GPG_SERVER_AND_KEY_IDS: (&str, &str) = (
-    UBUNTU_KEYSEVER,
+    UBUNTU_KEYSERVER,
     "\
 EFC0A467D613CB83C7ED6D30D894E2CE8B3D79F5 \
 A21FAB74B0088AA361152586B8EF1A6BA9DA2D5C \
@@ -53,7 +53,7 @@ const NGX_DEFAULT_VERSION: &str = "1.24.0";
 /// Key 2: Sergey Kandaurov's public key. For Nginx 1.25.4
 /// Key 3: Maxim Dounin's public key. At least used for Nginx 1.18.0
 const NGX_GPG_SERVER_AND_KEY_IDS: (&str, &str) = (
-    UBUNTU_KEYSEVER,
+    UBUNTU_KEYSERVER,
     "\
 13C82A63B603576156E30A4EA0EA981B66B0D967 \
 D6786CE303D9A9022998DC6CC8464D549AF75C0A \
@@ -125,6 +125,7 @@ struct BuildConfig {
     pcre_version: String,
     openssl_version: String,
     target: String,
+    os: String,
     ngx_debug: bool,
 }
 impl BuildConfig {
@@ -133,6 +134,9 @@ impl BuildConfig {
 
         let out_dir = PathBuf::from(env::var("OUT_DIR").expect("The required environment variable OUT_DIR is not set"));
         let target = env::var("TARGET").expect("The required environment variable TARGET is not set");
+
+        let os: String =
+            env::var("CARGO_CFG_TARGET_OS").expect("The required environment variable CARGO_CFG_TARGET_OS is not set");
 
         // ENVs user provides (SHOULD): version specification
 
@@ -199,6 +203,7 @@ impl BuildConfig {
             pcre_version: pcre_version,
             openssl_version: openssl_version,
             target: target,
+            os: os,
             ngx_debug: ngx_debug,
         }
     }
@@ -363,12 +368,12 @@ fn main() -> Result<(), Box<dyn StdError>> {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=wrapper.h");
     // Read autoconf generated makefile for NGINX and generate Rust bindings based on its includes
-    generate_binding(ngx_src_dir);
+    generate_binding(&conf.out_dir, &ngx_src_dir);
     Ok(())
 }
 
 /// Generates Rust bindings for NGINX
-fn generate_binding(nginx_source_dir: PathBuf) {
+fn generate_binding(out_dir: &Path, nginx_source_dir: &Path) {
     let autoconf_makefile_path = nginx_source_dir.join("objs").join("Makefile");
     let clang_args: Vec<String> = parse_includes_from_makefile(&autoconf_makefile_path)
         .into_iter()
@@ -387,10 +392,8 @@ fn generate_binding(nginx_source_dir: PathBuf) {
         .expect("Unable to generate bindings");
 
     // Write the bindings to the $OUT_DIR/bindings.rs file.
-    let out_dir_env = env::var("OUT_DIR").expect("The required environment variable OUT_DIR was not set");
-    let out_path = PathBuf::from(out_dir_env);
     bindings
-        .write_to_file(out_path.join("bindings.rs"))
+        .write_to_file(out_dir.join("bindings.rs"))
         .expect("Couldn't write bindings!");
 }
 
@@ -610,8 +613,7 @@ fn compile_nginx(conf: &BuildConfig, gpgm: &GPGManager) -> Result<PathBuf, Box<d
     let openssl_src_dir = find_dependency_path(&sources, "openssl")?;
     let pcre2_src_dir = find_dependency_path(&sources, "pcre2").or(find_dependency_path(&sources, "pcre"))?;
     let ngx_src_dir = find_dependency_path(&sources, "nginx")?;
-    let ngx_configure_flags =
-        nginx_configure_flags(&conf.ngx_install_dir, zlib_src_dir, openssl_src_dir, pcre2_src_dir);
+    let ngx_configure_flags = nginx_configure_flags(&conf, zlib_src_dir, openssl_src_dir, pcre2_src_dir);
     let nginx_binary_exists = conf.ngx_install_dir.join("sbin").join("nginx").exists();
     let autoconf_makefile_exists = ngx_src_dir.join("Makefile").exists();
     // We find out how NGINX was configured last time, so that we can compare it to what
@@ -651,7 +653,7 @@ fn build_info(nginx_configure_flags: &[String]) -> String {
 /// dependencies' paths. Note: the paths differ based on cargo targets because they may be
 /// configured differently for different os/platform targets.
 fn nginx_configure_flags(
-    nginx_install_dir: &Path,
+    conf: &BuildConfig,
     zlib_src_dir: &Path,
     openssl_src_dir: &Path,
     pcre2_src_dir: &Path,
@@ -674,12 +676,12 @@ fn nginx_configure_flags(
         }
         modules
     };
-    let mut nginx_opts = vec![format_source_path("--prefix", nginx_install_dir)];
-    if env::var("NGX_DEBUG").map_or(false, |s| s == "true") {
+    let mut nginx_opts = vec![format_source_path("--prefix", &conf.ngx_install_dir)];
+    if conf.ngx_debug {
         println!("Enabling --with-debug");
         nginx_opts.push("--with-debug".to_string());
     }
-    if env::var("CARGO_CFG_TARGET_OS").map_or(env::consts::OS == "linux", |s| s == "linux") {
+    if conf.os == "linux" {
         for flag in NGX_LINUX_ADDITIONAL_OPTS {
             nginx_opts.push(flag.to_string());
         }
