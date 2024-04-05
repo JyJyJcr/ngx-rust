@@ -88,3 +88,8 @@ macro_rules! count {
     () => { 0usize };
     ($x:tt, $( $xs:tt ),*) => { 1usize + $crate::count!($( $xs, )*) };
 }
+
+pub mod build_info {
+    pub const TARGET: &str = nginx_sys::build_info::TARGET;
+    pub const NGX_INSTALL_DIR: &str = nginx_sys::build_info::NGX_INSTALL_DIR;
+}

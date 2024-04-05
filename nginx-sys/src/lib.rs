@@ -206,3 +206,8 @@ pub unsafe fn add_to_ngx_table(
         table.lowcase_key = str_to_uchar(pool, String::from(key).to_ascii_lowercase().as_str());
     })
 }
+
+pub mod build_info {
+    pub const TARGET: &str = env!("NGINX_SYS_TARGET");
+    pub const NGX_INSTALL_DIR: &str = env!("NGINX_SYS_NGX_INSTALL_DIR");
+}
