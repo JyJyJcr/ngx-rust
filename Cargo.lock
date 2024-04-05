@@ -560,6 +560,7 @@ dependencies = [
  "flate2",
  "tar",
  "ureq",
+ "url",
  "which 6.0.0",
 ]
 

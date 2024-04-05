@@ -21,3 +21,4 @@ duct = "0.13.7"
 ureq = { version = "2.9.6", features = ["tls"] }
 flate2 = "1.0.28"
 tar = "0.4.40"
+url = "2.3.1"
