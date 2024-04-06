@@ -100,21 +100,6 @@ const NGX_LINUX_ADDITIONAL_OPTS: [&str; 3] = [
     "--with-cc-opt=-g -fstack-protector-strong -Wformat -Werror=format-security -Wp,-D_FORTIFY_SOURCE=2 -fPIC",
     "--with-ld-opt=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie",
 ];
-const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 12] = [
-    "NGX_DEBUG",
-    "OUT_DIR",
-    "TARGET",
-    "ZLIB_VERSION",
-    "PCRE2_VERSION",
-    "OPENSSL_VERSION",
-    "NGX_VERSION",
-    //"CARGO_CFG_TARGET_OS",
-    "CARGO_MANIFEST_DIR",
-    "CARGO_TARGET_TMPDIR",
-    "CACHE_DIR",
-    "NGX_INSTALL_ROOT_DIR",
-    "NGX_INSTALL_DIR",
-];
 
 struct BuildConfig {
     out_dir: PathBuf,
@@ -128,8 +113,40 @@ struct BuildConfig {
     target: String,
     os: String,
     ngx_debug: bool,
+    num_jobs: usize,
 }
 
+const ENV_OUT_DIR: &'static str = "OUT_DIR";
+const ENV_TARGET: &str = "TARGET";
+const ENV_CARGO_CFG_TARGET_OS: &str = "CARGO_CFG_TARGET_OS";
+const ENV_NGX_VERSION: &str = "NGX_VERSION";
+const ENV_ZLIB_VERSION: &str = "ZLIB_VERSION";
+const ENV_PCRE_VERSION: &str = "PCRE_VERSION";
+const ENV_PCRE2_VERSION: &str = "PCRE2_VERSION";
+const ENV_OPENSSL_VERSION: &str = "OPENSSL_VERSION";
+const ENV_CACHE_DIR: &str = "CACHE_DIR";
+const ENV_CARGO_MANIFEST_DIR: &str = "CARGO_MANIFEST_DIR";
+const ENV_NGX_INSTALL_ROOT_DIR: &str = "NGX_INSTALL_ROOT_DIR";
+const ENV_NGX_INSTALL_DIR: &str = "NGX_INSTALL_DIR";
+const ENV_CARGO_TARGET_TMPDIR: &str = "CARGO_TARGET_TMPDIR";
+const ENV_NGX_DEBUG: &str = "NGX_DEBUG";
+const ENV_NUM_JOBS: &str = "NUM_JOBS";
+const ENVS_TRIGGERING_RECOMPILE: [&str; 13] = [
+    ENV_OUT_DIR,
+    ENV_TARGET, //Self::ENV_CARGO_CFG_TARGET_OS not needed
+    ENV_NGX_VERSION,
+    ENV_ZLIB_VERSION,
+    ENV_PCRE_VERSION,
+    ENV_PCRE2_VERSION,
+    ENV_OPENSSL_VERSION,
+    ENV_CACHE_DIR,
+    ENV_CARGO_MANIFEST_DIR,
+    ENV_NGX_INSTALL_ROOT_DIR,
+    ENV_NGX_INSTALL_DIR,
+    ENV_CARGO_TARGET_TMPDIR,
+    ENV_NGX_DEBUG,
+    // Self::ENV_NUM_JOBS not needed
+];
 impl BuildConfig {
     fn from_env() -> Self {
         // ENVs cargo provides (MUST): cargo info
@@ -137,20 +154,20 @@ impl BuildConfig {
         fn var_or_fail(name: &str) -> String {
             env::var(name).expect(format!("The required environment variable {} is not set", name).as_str())
         }
-        let out_dir = PathBuf::from(var_or_fail("OUT_DIR"));
-        let target = var_or_fail("TARGET");
-        let os = var_or_fail("CARGO_CFG_TARGET_OS");
+        let out_dir = PathBuf::from(var_or_fail(ENV_OUT_DIR));
+        let target = var_or_fail(ENV_TARGET);
+        let os = var_or_fail(ENV_CARGO_CFG_TARGET_OS);
 
         // ENVs user provides (SHOULD): version specification
 
-        let ngx_version = env::var("NGX_VERSION").unwrap_or(NGX_DEFAULT_VERSION.into());
-        let zlib_version = env::var("ZLIB_VERSION").unwrap_or(ZLIB_DEFAULT_VERSION.into());
+        let ngx_version = env::var(ENV_NGX_VERSION).unwrap_or(NGX_DEFAULT_VERSION.into());
+        let zlib_version = env::var(ENV_ZLIB_VERSION).unwrap_or(ZLIB_DEFAULT_VERSION.into());
         // While Nginx 1.22.0 and later support pcre2 and openssl3, earlier ones only support pcre1 and openssl1. Here provides the appropriate (and as latest as possible) versions of these two dependencies as default, switching `***[major_version]_DEFAULT_VERSION` based on `is_after_1_22`. This facilitates to compile backport versions targeted for Nginx ealier than 1.22.0, which are still used in LTS releases of major Linux distributions.
         let ngx_version_vec: Vec<i16> = ngx_version.split('.').map(|s| s.parse().unwrap_or(-1)).collect();
         let ngx_after_1_22_0 = (ngx_version_vec.len() >= 2)
             && (ngx_version_vec[0] > 1 || (ngx_version_vec[0] == 1 && ngx_version_vec[1] >= 22));
         // leave env name `PCRE2_VERSION` for compat
-        let pcre_version = env::var("PCRE_VERSION").or(env::var("PCRE2_VERSION")).unwrap_or(
+        let pcre_version = env::var(ENV_PCRE_VERSION).or(env::var(ENV_PCRE2_VERSION)).unwrap_or(
             if ngx_after_1_22_0 {
                 PCRE2_DEFAULT_VERSION
             } else {
@@ -158,7 +175,7 @@ impl BuildConfig {
             }
             .into(),
         );
-        let openssl_version = env::var("OPENSSL_VERSION").unwrap_or(
+        let openssl_version = env::var(ENV_OPENSSL_VERSION).unwrap_or(
             if ngx_after_1_22_0 {
                 OPENSSL3_DEFAULT_VERSION
             } else {
@@ -173,8 +190,8 @@ impl BuildConfig {
         // Choose `.cache` relative to the manifest directory (nginx-sys) as the default cache directory
         // Environment variable `CACHE_DIR` overrides this
         // Recommendation: set env "CACHE_DIR = { value = ".cache", relative = true }" in `.cargo/config.toml` in your project
-        let cache_dir = env::var("CACHE_DIR").map_or(
-            env::var("CARGO_MANIFEST_DIR")
+        let cache_dir = env::var(ENV_CACHE_DIR).map_or(
+            env::var(ENV_CARGO_MANIFEST_DIR)
                 .map(PathBuf::from)
                 .unwrap_or(env::current_dir().expect("Failed to get current directory"))
                 .join(".cache"),
@@ -185,18 +202,27 @@ impl BuildConfig {
         make_dir_or_fail(&cache_dir);
 
         // prepare nginx install dir
-        let ngx_install_root_dir = env::var("NGX_INSTALL_ROOT_DIR").map_or(cache_dir.join("nginx"), PathBuf::from);
+        let ngx_install_root_dir = env::var(ENV_NGX_INSTALL_ROOT_DIR).map_or(cache_dir.join("nginx"), PathBuf::from);
         let ngx_install_dir =
-            env::var("NGX_INSTALL_DIR").map_or(ngx_install_root_dir.join(&ngx_version).join(&target), PathBuf::from);
+            env::var(ENV_NGX_INSTALL_DIR).map_or(ngx_install_root_dir.join(&ngx_version).join(&target), PathBuf::from);
         make_dir_or_fail(&ngx_install_dir);
 
         // prepare source root dir
-        let src_root_dir = env::var("CARGO_TARGET_TMPDIR").map_or(cache_dir.join("src").join(&target), PathBuf::from);
+        let src_root_dir = env::var(ENV_CARGO_TARGET_TMPDIR).map_or(cache_dir.join("src").join(&target), PathBuf::from);
         make_dir_or_fail(&src_root_dir);
 
         // ENVs user provides (MAY): debug mode
 
-        let ngx_debug = env::var("NGX_DEBUG").map_or(false, |s| s == "true");
+        let ngx_debug = env::var(ENV_NGX_DEBUG).map_or(false, |s| s == "true");
+
+        // ENVs user provides (MAY): thread num
+
+        // Level of concurrency to use when building nginx - cargo nicely provides this information
+        let num_jobs = match env::var(ENV_NUM_JOBS) {
+            Ok(s) => s.parse::<usize>().ok(),
+            Err(_) => thread::available_parallelism().ok().map(|n| n.get()),
+        }
+        .unwrap_or(1);
 
         Self {
             out_dir: out_dir,
@@ -210,21 +236,22 @@ impl BuildConfig {
             target: target,
             os: os,
             ngx_debug: ngx_debug,
+            num_jobs: num_jobs,
         }
     }
     fn hint(&self) {
         // Hint cargo to rebuild if any of the these environment variables values change
         // because they will trigger a recompilation of NGINX with different parameters
-        for var in ENV_VARS_TRIGGERING_RECOMPILE {
+        for var in ENVS_TRIGGERING_RECOMPILE {
             println!("cargo::rerun-if-env-changed={var}");
         }
         println!("cargo::rerun-if-changed=build.rs");
         println!("cargo::rerun-if-changed=wrapper.h");
-        println!("cargo::rustc-env=NGINX_SYS_TARGET={}", self.target);
-        println!(
-            "cargo::rustc-env=NGINX_SYS_NGX_INSTALL_DIR={}",
-            self.ngx_install_dir.display()
-        );
+        fn tell_env(name: &str, value: &str) {
+            println!("cargo::rustc-env=NGINX_SYS_{}={}", name, value);
+        }
+        tell_env("TARGET", &self.target);
+        tell_env("NGX_INSTALL_DIR", &self.ngx_install_dir.display().to_string());
     }
 }
 
@@ -676,7 +703,7 @@ fn compile_nginx(conf: &BuildConfig, dwner: &Downloader) -> Result<PathBuf, Box<
     if !nginx_binary_exists || !autoconf_makefile_exists || !build_info_no_change {
         fs::create_dir_all(&conf.ngx_install_dir)?;
         configure(ngx_configure_flags, ngx_src_dir)?;
-        make(ngx_src_dir, "install")?;
+        make(ngx_src_dir, "install", conf.num_jobs)?;
         let mut output = File::create(build_info_path)?;
         // Store the configure flags of the last successful build
         output.write_all(current_build_info.as_bytes())?;
@@ -759,7 +786,7 @@ fn configure(nginx_configure_flags: Vec<String>, nginx_src_dir: &Path) -> std::i
 }
 
 /// Run `make` within the NGINX source directory as an external process.
-fn make(nginx_src_dir: &Path, arg: &str) -> std::io::Result<Output> {
+fn make(nginx_src_dir: &Path, arg: &str, num_jobs: usize) -> std::io::Result<Output> {
     // Give preference to the binary with the name of gmake if it exists because this is typically
     // the GNU 4+ on MacOS (if it is installed via homebrew).
     let make_bin_path = match (which("gmake"), which("make")) {
@@ -767,13 +794,6 @@ fn make(nginx_src_dir: &Path, arg: &str) -> std::io::Result<Output> {
         (_, Ok(path)) => Ok(path),
         _ => Err(IoError::new(NotFound, "Unable to find make in path (gmake or make)")),
     }?;
-
-    // Level of concurrency to use when building nginx - cargo nicely provides this information
-    let num_jobs = match env::var("NUM_JOBS") {
-        Ok(s) => s.parse::<usize>().ok(),
-        Err(_) => thread::available_parallelism().ok().map(|n| n.get()),
-    }
-    .unwrap_or(1);
 
     /* Use the duct dependency here to merge the output of STDOUT and STDERR into a single stream,
     and to provide the combined output as a reader which can be iterated over line-by-line. We
