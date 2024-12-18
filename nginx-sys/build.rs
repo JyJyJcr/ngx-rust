@@ -100,7 +100,7 @@ const NGX_LINUX_ADDITIONAL_OPTS: [&str; 3] = [
     "--with-ld-opt=-Wl,-Bsymbolic-functions -Wl,-z,relro -Wl,-z,now -Wl,--as-needed -pie",
 ];
 const ENV_VARS_TRIGGERING_RECOMPILE: [&str; 12] = [
-    "DEBUG",
+    "NGX_DEBUG",
     "OUT_DIR",
     "ZLIB_VERSION",
     "PCRE2_VERSION",
