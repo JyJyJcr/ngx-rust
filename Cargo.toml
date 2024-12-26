@@ -28,7 +28,7 @@ rust-version.workspace = true
 nginx-sys = { path = "nginx-sys", default-features=false, version = "0.5.0"}
 
 [features]
-default = ["vendored","alloc"]
+default = ["vendored","std"]
 # use allocation
 alloc = ["nginx-sys/alloc"]
 # use std
