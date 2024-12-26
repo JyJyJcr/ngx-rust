@@ -32,6 +32,8 @@
 //! # now you can use dynamic modules with the NGINX
 //! ```
 
+// support both std and no_std
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
 /// The core module.
 ///
@@ -66,18 +68,18 @@ macro_rules! ngx_modules {
         #[no_mangle]
         pub static mut ngx_modules: [*const $crate::ffi::ngx_module_t; $crate::count!($( $mod, )+) + 1] = [
             $( unsafe { &$mod } as *const $crate::ffi::ngx_module_t, )+
-            ::std::ptr::null()
+            ::core::ptr::null()
         ];
 
         #[no_mangle]
-        pub static mut ngx_module_names: [*const ::std::ffi::c_char; $crate::count!($( $mod, )+) + 1] = [
-            $( concat!(stringify!($mod), "\0").as_ptr() as *const ::std::ffi::c_char, )+
-            ::std::ptr::null()
+        pub static mut ngx_module_names: [*const ::core::ffi::c_char; $crate::count!($( $mod, )+) + 1] = [
+            $( concat!(stringify!($mod), "\0").as_ptr() as *const ::core::ffi::c_char, )+
+            ::core::ptr::null()
         ];
 
         #[no_mangle]
-        pub static mut ngx_module_order: [*const ::std::ffi::c_char; 1] = [
-            ::std::ptr::null()
+        pub static mut ngx_module_order: [*const ::core::ffi::c_char; 1] = [
+            ::core::ptr::null()
         ];
     };
 }

@@ -1,5 +1,5 @@
-use std::ffi::{c_char, c_void};
-use std::ptr;
+use core::ffi::{c_char, c_void};
+use core::ptr;
 
 use crate::core::NGX_CONF_ERROR;
 use crate::core::*;
@@ -12,10 +12,10 @@ pub enum MergeConfigError {
     NoValue,
 }
 
-impl std::error::Error for MergeConfigError {}
+impl core::error::Error for MergeConfigError {}
 
-impl std::fmt::Display for MergeConfigError {
-    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Display for MergeConfigError {
+    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             MergeConfigError::NoValue => "no value".fmt(fmt),
         }
