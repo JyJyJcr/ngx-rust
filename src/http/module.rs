@@ -12,7 +12,8 @@ pub enum MergeConfigError {
     NoValue,
 }
 
-impl core::error::Error for MergeConfigError {}
+#[cfg(feature = "std")]
+impl std::error::Error for MergeConfigError {}
 
 impl core::fmt::Display for MergeConfigError {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
