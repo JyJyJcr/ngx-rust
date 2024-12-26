@@ -443,8 +443,8 @@ pub struct NgxListIterator<'a> {
 /// # Safety
 ///
 /// The caller has provided a valid [`ngx_str_t`] which can be dereferenced validly.
-pub unsafe fn list_iterator<'a>(list: &'a ngx_list_t) -> NgxListIterator<'a> {
-    let part: *const ngx_list_part_t = &(*list).part;
+pub unsafe fn list_iterator(list: &ngx_list_t) -> NgxListIterator {
+    let part: *const ngx_list_part_t = &list.part;
 
     NgxListIterator {
         done: false,
@@ -616,7 +616,7 @@ impl<'a> PartialEq<&'a Method> for Method {
     }
 }
 
-impl<'a> PartialEq<Method> for &'a Method {
+impl PartialEq<Method> for &Method {
     #[inline]
     fn eq(&self, other: &Method) -> bool {
         *self == other
@@ -644,7 +644,7 @@ impl<'a> PartialEq<&'a str> for Method {
     }
 }
 
-impl<'a> PartialEq<Method> for &'a str {
+impl PartialEq<Method> for &str {
     #[inline]
     fn eq(&self, other: &Method) -> bool {
         *self == other.as_ref()
