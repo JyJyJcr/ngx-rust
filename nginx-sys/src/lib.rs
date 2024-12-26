@@ -1,9 +1,16 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+extern crate alloc;
 
-use core::fmt;
 use core::ptr::copy_nonoverlapping;
 use core::slice;
+
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+use alloc::string::{FromUtf8Error, String};
+#[cfg(feature = "std")]
+use std::string::{FromUtf8Error, String};
 
 #[doc(hidden)]
 mod bindings {
@@ -130,6 +137,7 @@ impl ngx_str_t {
     ///
     /// # Returns
     /// An `ngx_str_t` instance representing the given `String`.
+    #[cfg(feature = "alloc")]
     pub unsafe fn from_string(pool: *mut ngx_pool_t, data: String) -> Self {
         ngx_str_t {
             data: str_to_uchar(pool, data.as_str()),
@@ -168,9 +176,9 @@ impl From<ngx_str_t> for &[u8] {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 impl TryFrom<ngx_str_t> for String {
-    type Error = std::string::FromUtf8Error;
+    type Error = FromUtf8Error;
 
     fn try_from(s: ngx_str_t) -> Result<Self, Self::Error> {
         let bytes: &[u8] = s.into();
@@ -178,8 +186,9 @@ impl TryFrom<ngx_str_t> for String {
     }
 }
 
-impl fmt::Display for ngx_str_t {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+#[cfg(feature = "alloc")]
+impl core::fmt::Display for ngx_str_t {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}", String::from_utf8_lossy((*self).into()))
     }
 }
@@ -219,6 +228,7 @@ impl TryFrom<ngx_str_t> for &str {
 /// let result = add_to_ngx_table(table, pool, key, value);
 /// # }
 /// ```
+#[cfg(feature = "alloc")]
 pub unsafe fn add_to_ngx_table(
     table: *mut ngx_table_elt_t,
     pool: *mut ngx_pool_t,
