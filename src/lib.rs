@@ -32,9 +32,11 @@
 //! # now you can use dynamic modules with the NGINX
 //! ```
 
-// support both std and no_std
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
 /// The core module.
 ///
 /// This module provides fundamental utilities needed to interface with many NGINX primitives.
@@ -61,8 +63,10 @@ pub mod log;
 /// The test utility module.
 ///
 /// This module provides utilities for integration tests with bundled NGINX.
-#[cfg(feature = "test_util")]
+#[cfg(all(feature = "test_util", feature = "std"))]
 pub mod test_util;
+#[cfg(all(feature = "test_util", not(feature = "std")))]
+compile_error!("feature \"test_util\" requires feature \"std\"");
 
 /// Define modules exported by this library.
 ///

@@ -1,5 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
+#[cfg(not(feature = "std"))]
+extern crate alloc;
 
 use core::fmt;
 use core::ptr::copy_nonoverlapping;
@@ -17,6 +20,11 @@ mod bindings {
     #![allow(rustdoc::broken_intra_doc_links)]
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
+#[cfg(not(feature = "std"))]
+use alloc::string;
+#[cfg(feature = "std")]
+use std::string;
+
 #[doc(no_inline)]
 pub use bindings::*;
 
@@ -92,7 +100,7 @@ impl ngx_str_t {
         self.len == 0
     }
 
-    /// Convert the nginx string to a string slice (`&str`).
+    /// Returns the contents of this `ngx_str_t` as a string slice (`&str`).
     ///
     /// # Safety
     /// This function is marked as unsafe because it involves raw pointer manipulation.
@@ -106,6 +114,99 @@ impl ngx_str_t {
     pub fn to_str(&self) -> &str {
         core::str::from_utf8(self.as_bytes()).unwrap()
     }
+
+    // /// Returns the contents of this `ngx_str_t` as a mutable string slice (`&str`).
+    // ///
+    // /// # Safety
+    // /// This function is marked as unsafe because it involves raw pointer manipulation.
+    // /// It assumes that the underlying `data` pointer is valid and points to a valid UTF-8 encoded string.
+    // ///
+    // /// # Panics
+    // /// This function panics if the `ngx_str_t` is not valid UTF-8.
+    // ///
+    // /// # Returns
+    // /// A mutable string slice (`&mut str`) representing the nginx string.
+    // pub fn to_str_mut(&mut self) -> &str {
+    //     core::str::from_utf8(self.as_bytes()).unwrap()
+    // }
+
+    // /// Convert `ngx_str_t` to a byte slice.
+    // ///
+    // /// The returned slice will **not** contain the optional nul terminator that `ngx_str_t.data`
+    // /// may have.
+    // ///
+    // /// # Safety
+    // /// This function is marked as unsafe because it involves lifetime generation.
+    // /// Caller must specify the proper lifetime which original `ngx_str_t` belongs to.
+    // #[inline]
+    // pub fn into_bytes<'a>(self) -> &'a [u8] {
+    //     if self.is_empty() {
+    //         &[]
+    //     } else {
+    //         // SAFETY: `ngx_str_t` with non-zero len must contain a valid correctly aligned pointer
+    //         unsafe { slice::from_raw_parts(self.data, self.len) }
+    //     }
+    // }
+
+    // /// Convert `ngx_str_t` to a mutable byte slice.
+    // ///
+    // /// The returned slice will **not** contain the optional nul terminator that `ngx_str_t.data`
+    // /// may have.
+    // ///
+    // /// # Safety
+    // /// This function is marked as unsafe because it involves raw pointer manipulation.
+    // /// It assumes that the underlying `data` pointer is valid and points to a valid UTF-8 encoded string.
+    // ///
+    // /// This function is marked as unsafe because it involves lifetime generation.
+    // /// Caller must specify the proper lifetime which original `ngx_str_t` belongs to.
+    // ///
+    // /// # Panics
+    // /// This function panics if the `ngx_str_t` is not valid UTF-8.
+    // ///
+    // /// # Returns
+    // /// A mutable string slice (`&mut str`) representing the nginx string.
+    // #[inline]
+    // pub fn into_bytes_mut<'a>(self) -> &'a mut [u8] {
+    //     if self.is_empty() {
+    //         &mut []
+    //     } else {
+    //         // SAFETY: `ngx_str_t` with non-zero len must contain a valid correctly aligned pointer
+    //         unsafe { slice::from_raw_parts_mut(self.data, self.len) }
+    //     }
+    // }
+
+    // /// Convert `ngx_str_t` to a string slice (`&str`).
+    // ///
+    // /// The returned slice will **not** contain the optional nul terminator that `ngx_str_t.data`
+    // /// may have.
+    // ///
+    // /// # Safety
+    // /// This function is marked as unsafe because it involves lifetime generation.
+    // /// Caller must specify the proper lifetime which original `ngx_str_t` belongs to.
+    // pub fn into_str<'a>(self) -> &'a str {
+    //     core::str::from_utf8(self.into_bytes()).unwrap()
+    // }
+
+    // /// Convert `ngx_str_t` to a mutable byte string slice (`&str`).
+    // ///
+    // /// The returned slice will **not** contain the optional nul terminator that `ngx_str_t.data`
+    // /// may have.
+    // ///
+    // /// # Safety
+    // /// This function is marked as unsafe because it involves raw pointer manipulation.
+    // /// It assumes that the underlying `data` pointer is valid and points to a valid UTF-8 encoded string.
+    // ///
+    // /// This function is marked as unsafe because it involves lifetime generation.
+    // /// Caller must specify the proper lifetime which original `ngx_str_t` belongs to.
+    // ///
+    // /// # Panics
+    // /// This function panics if the `ngx_str_t` is not valid UTF-8.
+    // ///
+    // /// # Returns
+    // /// A mutable string slice (`&mut str`) representing the nginx string.
+    // pub fn into_str_mut<'a>(self) -> &'a mut str {
+    //     core::str::from_utf8_mut(self.into_bytes_mut()).unwrap()
+    // }
 
     /// Create an `ngx_str_t` instance from a byte slice.
     ///
@@ -130,7 +231,7 @@ impl ngx_str_t {
     ///
     /// # Returns
     /// An `ngx_str_t` instance representing the given `String`.
-    pub unsafe fn from_string(pool: *mut ngx_pool_t, data: String) -> Self {
+    pub unsafe fn from_string(pool: *mut ngx_pool_t, data: string::String) -> Self {
         ngx_str_t {
             data: str_to_uchar(pool, data.as_str()),
             len: data.len(),
@@ -168,19 +269,18 @@ impl From<ngx_str_t> for &[u8] {
     }
 }
 
-#[cfg(feature = "std")]
-impl TryFrom<ngx_str_t> for String {
-    type Error = std::string::FromUtf8Error;
+impl TryFrom<ngx_str_t> for string::String {
+    type Error = string::FromUtf8Error;
 
     fn try_from(s: ngx_str_t) -> Result<Self, Self::Error> {
         let bytes: &[u8] = s.into();
-        String::from_utf8(bytes.into())
+        string::String::from_utf8(bytes.into())
     }
 }
 
 impl fmt::Display for ngx_str_t {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy((*self).into()))
+        write!(f, "{}", string::String::from_utf8_lossy((*self).into()))
     }
 }
 
@@ -234,6 +334,6 @@ pub unsafe fn add_to_ngx_table(
         table.key.data = str_to_uchar(pool, key);
         table.value.len = value.len();
         table.value.data = str_to_uchar(pool, value);
-        table.lowcase_key = str_to_uchar(pool, String::from(key).to_ascii_lowercase().as_str());
+        table.lowcase_key = str_to_uchar(pool, string::String::from(key).to_ascii_lowercase().as_str());
     })
 }

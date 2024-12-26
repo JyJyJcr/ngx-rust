@@ -3,6 +3,11 @@ use core::str::{self, Utf8Error};
 
 use crate::ffi::*;
 
+#[cfg(not(feature = "std"))]
+use alloc::{borrow::Cow, string::String};
+#[cfg(feature = "std")]
+use std::{borrow::Cow, string::String};
+
 /// Static string initializer for [`ngx_str_t`].
 ///
 /// The resulting byte string is always nul-terminated (just like a C string).
@@ -63,8 +68,7 @@ impl NgxStr {
     /// Converts an [`NgxStr`] into a [`Cow<str>`], replacing invalid UTF-8 sequences.
     ///
     /// See [`String::from_utf8_lossy`].
-    #[cfg(feature = "std")]
-    pub fn to_string_lossy(&self) -> std::borrow::Cow<str> {
+    pub fn to_string_lossy(&self) -> Cow<str> {
         String::from_utf8_lossy(self.as_bytes())
     }
 
