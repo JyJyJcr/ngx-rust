@@ -1,6 +1,7 @@
 use core::error::Error;
 use core::ffi::c_void;
 use core::fmt;
+use core::marker::PhantomData;
 use core::str::FromStr;
 
 use crate::core::*;
@@ -427,11 +428,12 @@ impl fmt::Debug for Request {
 /// Iterator for [`ngx_list_t`] types.
 ///
 /// Implementes the core::iter::Iterator trait.
-pub struct NgxListIterator {
+pub struct NgxListIterator<'a> {
     done: bool,
     part: *const ngx_list_part_t,
     h: *const ngx_table_elt_t,
     i: ngx_uint_t,
+    __: PhantomData<&'a ()>,
 }
 
 /// Creates new HTTP header iterator
@@ -439,7 +441,7 @@ pub struct NgxListIterator {
 /// # Safety
 ///
 /// The caller has provided a valid [`ngx_str_t`] which can be dereferenced validly.
-pub unsafe fn list_iterator(list: *const ngx_list_t) -> NgxListIterator {
+pub unsafe fn list_iterator<'a>(list: &'a ngx_list_t) -> NgxListIterator<'a> {
     let part: *const ngx_list_part_t = &(*list).part;
 
     NgxListIterator {
@@ -447,17 +449,16 @@ pub unsafe fn list_iterator(list: *const ngx_list_t) -> NgxListIterator {
         part,
         h: (*part).elts as *const ngx_table_elt_t,
         i: 0,
+        __: PhantomData,
     }
 }
 
 // iterator for ngx_list_t
-impl Iterator for NgxListIterator {
-    // type Item = (&str,&str);
-    // TODO: try to use str instead of string
+impl<'a> Iterator for NgxListIterator<'a> {
+    type Item = (&'a str, &'a str);
+    // TODO: try to use struct instead of &str pair
     // something like pub struct Header(ngx_table_elt_t);
     // then header would have key and value
-
-    type Item = (String, String);
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
@@ -477,10 +478,10 @@ impl Iterator for NgxListIterator {
                 }
 
                 let header: *const ngx_table_elt_t = self.h.add(self.i);
-                let header_name: ngx_str_t = (*header).key;
-                let header_value: ngx_str_t = (*header).value;
+                let header_name: &ngx_str_t = &(*header).key;
+                let header_value: &ngx_str_t = &(*header).value;
                 self.i += 1;
-                Some((header_name.to_string(), header_value.to_string()))
+                Some((header_name.to_str(), header_value.to_str()))
             }
         }
     }
