@@ -28,7 +28,9 @@ rust-version.workspace = true
 nginx-sys = { path = "nginx-sys", version = "0.5.0"}
 
 [features]
-default = ["vendored"]
+default = ["vendored","std"]
+# use std memory allocation
+std = []
 # Build our own copy of the NGINX by default.
 # This could be disabled with `--no-default-features` to minimize the dependency tree
 # when building against an existing copy of the NGINX with the NGX_OBJS variable.
