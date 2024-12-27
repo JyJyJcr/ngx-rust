@@ -16,9 +16,6 @@ nginx-sys = "0.5.0"
 
 - `vendored`: Enables the build scripts to download and build a copy of nginx source and link against it.
   This feature is enabled by default.
-- `alloc`: Enables the components using memory allocation. If no `std` flag, `alloc` crate is internally used instead. This flag is mainly for `no_std` build.
-- `std`: Enables the components using `std` crate. Currently the available components are same to when specifying `alloc` only.
-  This feature is enabled by default.
 
 ## Output variables
 
