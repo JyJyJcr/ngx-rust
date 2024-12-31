@@ -33,6 +33,7 @@ default = ["vendored"]
 # This could be disabled with `--no-default-features` to minimize the dependency tree
 # when building against an existing copy of the NGINX with the NGX_OBJS variable.
 vendored = ["nginx-sys/vendored"]
+static_ref = []
 
 [badges]
 maintenance = { status = "experimental" }
