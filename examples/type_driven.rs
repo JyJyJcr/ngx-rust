@@ -6,18 +6,21 @@ use ngx::http::{HttpMainConf, HttpModuleSkel};
 use ngx::module::{
     CommandArgFlag, CommandArgFlagSet, CommandCallRule, CommandContextFlag, CommandContextFlagSet, CommandError,
 };
-use ngx::{arg_flags, context_flags, exhibit_modules, ngx_string};
+use ngx::{arg_flags, context_flags, ngx_string};
 use ngx::{
-    http::{DefaultInit, DefaultMerge, HttpModule, NgxHttpModule, NgxHttpModuleCommands, NgxHttpModuleCommandsRefMut},
+    http::{DefaultInit, DefaultMerge, HttpModule, NgxHttpModule, NgxHttpModuleCommands},
     module::{Command, NgxModuleCommandsBuilder},
-    util::StaticRefMut,
 };
 
-#[cfg(feature = "export-modules")]
+#[cfg(static_ref_mut)]
+use ngx::{exhibit_modules, http::NgxHttpModuleCommandsRefMut, util::StaticRefMut};
+
+#[cfg(all(static_ref_mut, feature = "export-modules"))]
 exhibit_modules!(HttpModuleSkel<FooBarHttpModule>);
 
 struct FooBarHttpModule;
 impl HttpModule for FooBarHttpModule {
+    #[cfg(static_ref_mut)]
     const SELF: StaticRefMut<NgxHttpModule<Self>> = {
         static mut FOO_BAR_HTTP_MODULE: NgxHttpModule<FooBarHttpModule> = NgxHttpModule::new();
         unsafe { StaticRefMut::from_mut(&mut *addr_of_mut!(FOO_BAR_HTTP_MODULE)) }
@@ -25,6 +28,7 @@ impl HttpModule for FooBarHttpModule {
 
     const NAME: &'static CStr = c"foo_bar_module";
 
+    #[cfg(static_ref_mut)]
     const COMMANDS: NgxHttpModuleCommandsRefMut<Self> = {
         static mut FOO_BAR_HTTP_MODULE_COMMANDS: NgxHttpModuleCommands<FooBarHttpModule, { 1 + 1 }> =
             NgxModuleCommandsBuilder::new().add::<FooBarCommand>().build();

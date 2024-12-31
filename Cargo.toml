@@ -33,10 +33,12 @@ default = ["vendored"]
 # This could be disabled with `--no-default-features` to minimize the dependency tree
 # when building against an existing copy of the NGINX with the NGX_OBJS variable.
 vendored = ["nginx-sys/vendored"]
-static_ref = []
 
 [badges]
 maintenance = { status = "experimental" }
 
 [dev-dependencies]
 target-triple = "0.1.2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(static_ref_mut)'] }

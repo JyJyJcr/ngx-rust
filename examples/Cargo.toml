@@ -51,7 +51,6 @@ crate-type = ["cdylib"]
 name = "type_driven"
 path = "type_driven.rs"
 crate-type = ["cdylib"]
-required-features = ["static_ref"]
 
 [features]
 default = ["export-modules", "ngx/vendored"]
@@ -62,4 +61,3 @@ default = ["export-modules", "ngx/vendored"]
 # See https://github.com/rust-lang/rust/issues/20267
 export-modules = []
 linux = []
-static_ref = ["ngx/static_ref"]

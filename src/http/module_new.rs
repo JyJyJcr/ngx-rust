@@ -15,7 +15,7 @@ use crate::module::{
     CommandCallRule, CommandCallRuleBy, CommandOffset, CycleDelegate, Module, ModuleSignature, NgxModule,
     NgxModuleCommands, NgxModuleCtx, PreCycleDelegate,
 };
-#[cfg(feature = "static_ref")]
+#[cfg(static_ref_mut)]
 use crate::{module::NgxModuleCommandsRefMut, util::StaticRefMut};
 use ::core::marker::PhantomData;
 use std::ffi::{c_char, c_void, CStr};
@@ -26,14 +26,14 @@ use super::{Merge, MergeConfigError, Request};
 /// Wrapper of `HttpModule` implementing `Module`.
 pub struct HttpModuleSkel<M: HttpModule>(PhantomData<M>);
 impl<M: HttpModule> Module for HttpModuleSkel<M> {
-    #[cfg(feature = "static_ref")]
+    #[cfg(static_ref_mut)]
     const SELF: StaticRefMut<NgxModule<Self>> = unsafe { StaticRefMut::from_mut(&mut M::SELF.to_mut().0) };
     const NAME: &'static CStr = M::NAME;
     const TYPE: ModuleSignature = unsafe { ModuleSignature::from_ngx_uint(NGX_HTTP_MODULE as ngx_uint_t) };
     type Ctx = ngx_http_module_t;
-    #[cfg(feature = "static_ref")]
+    #[cfg(static_ref_mut)]
     const CTX: StaticRefMut<NgxModuleCtx<Self>> = unsafe { StaticRefMut::from_mut(&mut M::SELF.to_mut().1) };
-    #[cfg(feature = "static_ref")]
+    #[cfg(static_ref_mut)]
     const COMMANDS: NgxModuleCommandsRefMut<Self> = M::COMMANDS;
 
     type MasterInitializer = M::MasterInitializer;
@@ -47,7 +47,7 @@ pub struct NgxHttpModule<M: HttpModule>(
     #[allow(dead_code)] NgxModule<HttpModuleSkel<M>>,
     NgxModuleCtx<HttpModuleSkel<M>>,
 );
-#[cfg(feature = "static_ref")]
+#[cfg(static_ref_mut)]
 impl<M: HttpModule> Default for NgxHttpModule<M> {
     fn default() -> Self {
         Self::new()
@@ -56,7 +56,7 @@ impl<M: HttpModule> Default for NgxHttpModule<M> {
 
 impl<M: HttpModule> NgxHttpModule<M> {
     /// Construct this type.
-    #[cfg(feature = "static_ref")]
+    #[cfg(static_ref_mut)]
     pub const fn new() -> Self {
         Self(NgxModule::new(), unsafe {
             NgxModuleCtx::from_raw(ngx_http_module_t {
@@ -100,18 +100,18 @@ impl<M: HttpModule> NgxHttpModule<M> {
 /// Type Alias of `NgxModuleCommands` for `HttpModule`.
 pub type NgxHttpModuleCommands<M, const N: usize> = NgxModuleCommands<HttpModuleSkel<M>, N>;
 /// Type Alias of `NgxModuleCommandsRefMut` for `HttpModule`.
-#[cfg(feature = "static_ref")]
+#[cfg(static_ref_mut)]
 pub type NgxHttpModuleCommandsRefMut<M> = NgxModuleCommandsRefMut<HttpModuleSkel<M>>;
 
 /// Type safe interface expressing unique Nginx Http module.
 pub trait HttpModule: Sized + 'static {
     /// Wrapper of static mutable `NgxModule` and `NgxModuleCtx` object expressing this module.
-    #[cfg(feature = "static_ref")]
+    #[cfg(static_ref_mut)]
     const SELF: StaticRefMut<NgxHttpModule<Self>>;
     /// CStr module name expression.
     const NAME: &'static CStr;
     ///  Wrapper of static mutable `NgxHttpModuleCommands` object bound to this module.
-    #[cfg(feature = "static_ref")]
+    #[cfg(static_ref_mut)]
     const COMMANDS: NgxHttpModuleCommandsRefMut<Self>;
 
     /// Type deligating `init_master` (not called now).
