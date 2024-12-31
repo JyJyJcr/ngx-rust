@@ -5,6 +5,12 @@ pub struct ConstArrayBuilder<T, const N: usize> {
     len: usize,
     inner: [MaybeUninit<T>; N],
 }
+impl<T, const N: usize> Default for ConstArrayBuilder<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T, const N: usize> ConstArrayBuilder<T, N> {
     /// Constructs a new, empty builder with capacity size = N.
     pub const fn new() -> Self {
