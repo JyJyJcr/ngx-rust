@@ -1,6 +1,6 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 
 use core::ptr::copy_nonoverlapping;
 use core::slice;
@@ -222,6 +222,9 @@ pub unsafe fn add_to_ngx_table(
 
 #[cfg(test)]
 mod tests {
+    extern crate alloc;
+    use alloc::string::ToString;
+
     use super::*;
 
     #[test]
