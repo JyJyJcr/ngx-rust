@@ -450,10 +450,11 @@ pub unsafe fn list_iterator(list: &ngx_list_t) -> NgxListIterator {
 
 // iterator for ngx_list_t
 impl<'a> Iterator for NgxListIterator<'a> {
-    type Item = (&'a str, &'a str);
     // TODO: try to use struct instead of &str pair
     // something like pub struct Header(ngx_table_elt_t);
     // then header would have key and value
+
+    type Item = (&'a str, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
         unsafe {
