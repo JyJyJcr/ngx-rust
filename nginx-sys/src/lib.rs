@@ -1,9 +1,9 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
 
-use std::fmt;
-use std::ptr::copy_nonoverlapping;
-use std::slice;
+use core::fmt;
+use core::ptr::copy_nonoverlapping;
+use core::slice;
 
 #[doc(hidden)]
 mod bindings {
@@ -104,7 +104,7 @@ impl ngx_str_t {
     /// # Returns
     /// A string slice (`&str`) representing the nginx string.
     pub fn to_str(&self) -> &str {
-        std::str::from_utf8(self.as_bytes()).unwrap()
+        core::str::from_utf8(self.as_bytes()).unwrap()
     }
 
     /// Create an `ngx_str_t` instance from a byte slice.
@@ -168,6 +168,7 @@ impl From<ngx_str_t> for &[u8] {
     }
 }
 
+#[cfg(feature = "std")]
 impl TryFrom<ngx_str_t> for String {
     type Error = std::string::FromUtf8Error;
 
@@ -184,10 +185,10 @@ impl fmt::Display for ngx_str_t {
 }
 
 impl TryFrom<ngx_str_t> for &str {
-    type Error = std::str::Utf8Error;
+    type Error = core::str::Utf8Error;
 
     fn try_from(s: ngx_str_t) -> Result<Self, Self::Error> {
-        std::str::from_utf8(s.into())
+        core::str::from_utf8(s.into())
     }
 }
 
