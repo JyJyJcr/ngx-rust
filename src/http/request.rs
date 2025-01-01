@@ -264,6 +264,7 @@ impl Request {
     /// Add header to the `headers_in` object.
     ///
     /// See <https://nginx.org/en/docs/dev/development_guide.html#http_request>
+    #[cfg(feature = "alloc")]
     pub fn add_header_in(&mut self, key: &str, value: &str) -> Option<()> {
         let table: *mut ngx_table_elt_t = unsafe { ngx_list_push(&mut self.0.headers_in.headers) as _ };
         unsafe { add_to_ngx_table(table, self.0.pool, key, value) }
@@ -272,6 +273,7 @@ impl Request {
     /// Add header to the `headers_out` object.
     ///
     /// See <https://nginx.org/en/docs/dev/development_guide.html#http_request>
+    #[cfg(feature = "alloc")]
     pub fn add_header_out(&mut self, key: &str, value: &str) -> Option<()> {
         let table: *mut ngx_table_elt_t = unsafe { ngx_list_push(&mut self.0.headers_out.headers) as _ };
         unsafe { add_to_ngx_table(table, self.0.pool, key, value) }

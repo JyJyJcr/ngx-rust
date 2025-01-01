@@ -35,6 +35,9 @@
 // support both std and no_std
 #![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
+#[cfg(all(not(feature = "std"), feature = "alloc"))]
+extern crate alloc;
+
 /// The core module.
 ///
 /// This module provides fundamental utilities needed to interface with many NGINX primitives.
