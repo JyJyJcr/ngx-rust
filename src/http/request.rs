@@ -393,13 +393,13 @@ impl Request {
     }
 
     /// Iterate over headers_in
-    /// each header item is (String, String) (copied)
+    /// each header item is (&str, &str) (borrowed)
     pub fn headers_in_iterator(&self) -> NgxListIterator {
         unsafe { list_iterator(&self.0.headers_in.headers) }
     }
 
     /// Iterate over headers_out
-    /// each header item is (String, String) (copied)
+    /// each header item is (&str, &str) (borrowed)
     pub fn headers_out_iterator(&self) -> NgxListIterator {
         unsafe { list_iterator(&self.0.headers_out.headers) }
     }
