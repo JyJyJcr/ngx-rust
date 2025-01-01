@@ -1,4 +1,5 @@
 use core::ffi::{c_char, c_void};
+use core::fmt;
 use core::ptr;
 
 use crate::core::NGX_CONF_ERROR;
@@ -15,8 +16,8 @@ pub enum MergeConfigError {
 #[cfg(feature = "std")]
 impl std::error::Error for MergeConfigError {}
 
-impl core::fmt::Display for MergeConfigError {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl fmt::Display for MergeConfigError {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
             MergeConfigError::NoValue => "no value".fmt(fmt),
         }

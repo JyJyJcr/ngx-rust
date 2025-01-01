@@ -2,6 +2,7 @@
 #![warn(missing_docs)]
 #![no_std]
 
+use core::fmt;
 use core::ptr::copy_nonoverlapping;
 use core::slice;
 
@@ -147,8 +148,8 @@ impl From<ngx_str_t> for &[u8] {
     }
 }
 
-impl core::fmt::Display for ngx_str_t {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+impl fmt::Display for ngx_str_t {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // The implementation is similar to an inlined `String::from_utf8_lossy`, with two
         // important differences:
         //
@@ -158,7 +159,7 @@ impl core::fmt::Display for ngx_str_t {
             f.write_str(chunk.valid())?;
             for byte in chunk.invalid() {
                 f.write_str("\\x")?;
-                core::fmt::LowerHex::fmt(byte, f)?;
+                fmt::LowerHex::fmt(byte, f)?;
             }
         }
         Ok(())
