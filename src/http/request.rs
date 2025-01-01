@@ -1,6 +1,6 @@
 use core::ffi::c_void;
 use core::fmt;
-use core::marker::PhantomData;
+use core::slice::from_raw_parts;
 use core::str::FromStr;
 
 use crate::core::*;
@@ -424,11 +424,20 @@ impl fmt::Debug for Request {
 ///
 /// Implementes the core::iter::Iterator trait.
 pub struct NgxListIterator<'a> {
-    done: bool,
-    part: *const ngx_list_part_t,
-    h: *const ngx_table_elt_t,
+    part: Option<ListPart<'a>>,
     i: ngx_uint_t,
-    __: PhantomData<&'a ()>,
+}
+struct ListPart<'a> {
+    raw: &'a ngx_list_part_t,
+    arr: &'a [ngx_table_elt_t],
+}
+impl<'a> From<&'a ngx_list_part_t> for ListPart<'a> {
+    fn from(raw: &'a ngx_list_part_t) -> Self {
+        Self {
+            raw,
+            arr: &unsafe { from_raw_parts(raw.elts.cast::<ngx_table_elt_t>(), raw.nelts) },
+        }
+    }
 }
 
 /// Creates new HTTP header iterator
@@ -437,14 +446,9 @@ pub struct NgxListIterator<'a> {
 ///
 /// The caller has provided a valid [`ngx_str_t`] which can be dereferenced validly.
 pub unsafe fn list_iterator(list: &ngx_list_t) -> NgxListIterator {
-    let part: *const ngx_list_part_t = &list.part;
-
     NgxListIterator {
-        done: false,
-        part,
-        h: (*part).elts as *const ngx_table_elt_t,
+        part: Some((&list.part).into()),
         i: 0,
-        __: PhantomData,
     }
 }
 
@@ -457,29 +461,19 @@ impl<'a> Iterator for NgxListIterator<'a> {
     type Item = (&'a str, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
-            if self.done {
-                None
+        let part = self.part.as_ref()?;
+        let header = &part.arr[self.i];
+        self.i += 1;
+        if self.i >= part.arr.len() {
+            if let Some(next_part_raw) = unsafe { part.raw.next.as_ref() } {
+                // loop back
+                self.part = Some(next_part_raw.into());
+                self.i = 0;
             } else {
-                if self.i >= (*self.part).nelts {
-                    if (*self.part).next.is_null() {
-                        self.done = true;
-                        return None;
-                    }
-
-                    // loop back
-                    self.part = (*self.part).next;
-                    self.h = (*self.part).elts as *mut ngx_table_elt_t;
-                    self.i = 0;
-                }
-
-                let header: *const ngx_table_elt_t = self.h.add(self.i);
-                let header_name: &ngx_str_t = &(*header).key;
-                let header_value: &ngx_str_t = &(*header).value;
-                self.i += 1;
-                Some((header_name.to_str(), header_value.to_str()))
+                self.part = None;
             }
         }
+        Some((header.key.to_str(), header.value.to_str()))
     }
 }
 
