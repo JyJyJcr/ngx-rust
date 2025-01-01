@@ -1,4 +1,3 @@
-use core::error::Error;
 use core::fmt;
 
 use crate::core::Status;
@@ -29,7 +28,8 @@ impl fmt::Display for InvalidHTTPStatusCode {
     }
 }
 
-impl Error for InvalidHTTPStatusCode {}
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidHTTPStatusCode {}
 
 impl From<HTTPStatus> for Status {
     fn from(val: HTTPStatus) -> Self {
