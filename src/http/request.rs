@@ -435,7 +435,7 @@ impl<'a> From<&'a ngx_list_part_t> for ListPart<'a> {
     fn from(raw: &'a ngx_list_part_t) -> Self {
         Self {
             raw,
-            arr: &unsafe { from_raw_parts(raw.elts.cast::<ngx_table_elt_t>(), raw.nelts) },
+            arr: unsafe { from_raw_parts(raw.elts.cast::<ngx_table_elt_t>(), raw.nelts) },
         }
     }
 }
