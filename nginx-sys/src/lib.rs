@@ -1,16 +1,9 @@
 #![doc = include_str!("../README.md")]
 #![warn(missing_docs)]
-#![cfg_attr(not(feature = "std"), no_std)]
-#[cfg(all(not(feature = "std"), feature = "alloc"))]
-extern crate alloc;
+#![cfg_attr(not(test), no_std)]
 
 use core::ptr::copy_nonoverlapping;
 use core::slice;
-
-#[cfg(all(not(feature = "std"), feature = "alloc"))]
-use alloc::string::{FromUtf8Error, String};
-#[cfg(feature = "std")]
-use std::string::{FromUtf8Error, String};
 
 #[doc(hidden)]
 mod bindings {
@@ -123,28 +116,6 @@ impl ngx_str_t {
         bytes_to_uchar(pool, src).map(|data| Self { data, len: src.len() })
     }
 
-    /// Create an `ngx_str_t` instance from a `String`.
-    ///
-    /// # Arguments
-    ///
-    /// * `pool` - A pointer to the nginx memory pool (`ngx_pool_t`).
-    /// * `data` - The `String` from which to create the nginx string.
-    ///
-    /// # Safety
-    /// This function is marked as unsafe because it accepts a raw pointer argument. There is no
-    /// way to know if `pool` is pointing to valid memory. The caller must provide a valid pool to
-    /// avoid indeterminate behavior.
-    ///
-    /// # Returns
-    /// An `ngx_str_t` instance representing the given `String`.
-    #[cfg(feature = "alloc")]
-    pub unsafe fn from_string(pool: *mut ngx_pool_t, data: String) -> Self {
-        ngx_str_t {
-            data: str_to_uchar(pool, data.as_str()),
-            len: data.len(),
-        }
-    }
-
     /// Create an `ngx_str_t` instance from a string slice (`&str`).
     ///
     /// # Arguments
@@ -176,20 +147,21 @@ impl From<ngx_str_t> for &[u8] {
     }
 }
 
-#[cfg(feature = "alloc")]
-impl TryFrom<ngx_str_t> for String {
-    type Error = FromUtf8Error;
-
-    fn try_from(s: ngx_str_t) -> Result<Self, Self::Error> {
-        let bytes: &[u8] = s.into();
-        String::from_utf8(bytes.into())
-    }
-}
-
-#[cfg(feature = "alloc")]
 impl core::fmt::Display for ngx_str_t {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "{}", String::from_utf8_lossy((*self).into()))
+        // The implementation is similar to an inlined `String::from_utf8_lossy`, with two
+        // important differences:
+        //
+        //  - it writes directly to the Formatter instead of allocating a temporary String
+        //  - invalid sequences are represented as escaped individual bytes
+        for chunk in self.as_bytes().utf8_chunks() {
+            f.write_str(chunk.valid())?;
+            for byte in chunk.invalid() {
+                f.write_str("\\x")?;
+                core::fmt::LowerHex::fmt(byte, f)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -228,22 +200,47 @@ impl TryFrom<ngx_str_t> for &str {
 /// let result = add_to_ngx_table(table, pool, key, value);
 /// # }
 /// ```
-#[cfg(feature = "alloc")]
 pub unsafe fn add_to_ngx_table(
     table: *mut ngx_table_elt_t,
     pool: *mut ngx_pool_t,
-    key: &str,
-    value: &str,
+    key: impl AsRef<[u8]>,
+    value: impl AsRef<[u8]>,
 ) -> Option<()> {
-    if table.is_null() {
-        return None;
+    if let Some(table) = table.as_mut() {
+        let key = key.as_ref();
+        table.key = ngx_str_t::from_bytes(pool, key)?;
+        table.value = ngx_str_t::from_bytes(pool, value.as_ref())?;
+        table.lowcase_key = ngx_pnalloc(pool, table.key.len).cast();
+        if table.lowcase_key.is_null() {
+            return None;
+        }
+        table.hash = ngx_hash_strlow(table.lowcase_key, table.key.data, table.key.len);
+        return Some(());
     }
-    table.as_mut().map(|table| {
-        table.hash = 1;
-        table.key.len = key.len();
-        table.key.data = str_to_uchar(pool, key);
-        table.value.len = value.len();
-        table.value.data = str_to_uchar(pool, value);
-        table.lowcase_key = str_to_uchar(pool, String::from(key).to_ascii_lowercase().as_str());
-    })
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ngx_str_display() {
+        let pairs: &[(&[u8], &str)] = &[
+            (b"", ""),
+            (b"Ferris the \xf0\x9f\xa6\x80", "Ferris the 🦀"),
+            (b"\xF0\x90\x80", "\\xf0\\x90\\x80"),
+            (b"\xF0\x90\x80Hello World", "\\xf0\\x90\\x80Hello World"),
+            (b"Hello \xF0\x90\x80World", "Hello \\xf0\\x90\\x80World"),
+            (b"Hello World\xF0\x90\x80", "Hello World\\xf0\\x90\\x80"),
+        ];
+
+        for (bytes, expected) in pairs {
+            let str = ngx_str_t {
+                data: bytes.as_ptr().cast_mut(),
+                len: bytes.len(),
+            };
+            assert_eq!(str.to_string(), *expected);
+        }
+    }
 }
