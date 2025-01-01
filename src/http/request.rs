@@ -439,8 +439,8 @@ pub struct NgxListIterator<'a> {
 /// # Safety
 ///
 /// The caller has provided a valid [`ngx_str_t`] which can be dereferenced validly.
-pub unsafe fn list_iterator<'a>(list: &'a ngx_list_t) -> NgxListIterator<'a> {
-    let part: *const ngx_list_part_t = &(*list).part;
+pub unsafe fn list_iterator(list: &ngx_list_t) -> NgxListIterator {
+    let part: *const ngx_list_part_t = &list.part;
 
     NgxListIterator {
         done: false,
