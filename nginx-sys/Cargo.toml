@@ -27,5 +27,4 @@ ureq = { version = "2.9.6", features = ["tls"], optional = true }
 which = { version = "6.0.0", optional = true }
 
 [features]
-default = ["vendored"]
 vendored = ["dep:which", "dep:duct", "dep:ureq", "dep:flate2", "dep:tar"]
