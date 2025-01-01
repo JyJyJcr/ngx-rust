@@ -8,16 +8,16 @@ pub fn check_mask(mask: DebugMask, log_level: usize) -> bool {
     true
 }
 
-#[cfg(all(not(feature = "std"), feature = "alloc"))]
+#[cfg(feature = "alloc")]
 #[doc(hidden)]
 pub mod __log_macro_extern {
-    pub use alloc::ffi::CString;
+    pub use ::alloc::ffi::CString;
 }
-#[cfg(feature = "std")]
-#[doc(hidden)]
-pub mod __log_macro_extern {
-    pub use std::ffi::CString;
-}
+// #[cfg(feature = "std")]
+// #[doc(hidden)]
+// pub mod __log_macro_extern {
+//     pub use std::ffi::CString;
+// }
 
 /// Write to logger at a specified level.
 ///
