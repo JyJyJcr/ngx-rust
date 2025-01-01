@@ -14,7 +14,8 @@ nginx-sys = "0.5.0"
 
 ## Features
 
-- `vendored`: Enables the build scripts to download and build a copy of nginx source and link against it.
+- `vendored`: Enables the build scripts to download and build a copy of nginx
+  source and link against it.
   This feature is enabled by default.
 
 ## Output variables
