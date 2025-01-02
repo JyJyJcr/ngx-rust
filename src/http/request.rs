@@ -433,10 +433,12 @@ struct ListPart<'a> {
 }
 impl<'a> From<&'a ngx_list_part_t> for ListPart<'a> {
     fn from(raw: &'a ngx_list_part_t) -> Self {
-        Self {
-            raw,
-            arr: unsafe { from_raw_parts(raw.elts.cast::<ngx_table_elt_t>(), raw.nelts) },
-        }
+        let arr = if let Some(elts) = unsafe { raw.elts.cast::<ngx_table_elt_t>().as_ref() } {
+            unsafe { from_raw_parts(elts, raw.nelts) }
+        } else {
+            &[]
+        };
+        Self { raw, arr }
     }
 }
 
@@ -461,18 +463,19 @@ impl<'a> Iterator for NgxListIterator<'a> {
     type Item = (&'a str, &'a str);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let part = self.part.as_ref()?;
-        let header = &part.arr[self.i];
-        self.i += 1;
+        let part = self.part.as_mut()?;
         if self.i >= part.arr.len() {
             if let Some(next_part_raw) = unsafe { part.raw.next.as_ref() } {
                 // loop back
-                self.part = Some(next_part_raw.into());
+                *part = next_part_raw.into();
                 self.i = 0;
             } else {
                 self.part = None;
+                return None;
             }
         }
+        let header = &part.arr[self.i];
+        self.i += 1;
         Some((header.key.to_str(), header.value.to_str()))
     }
 }
