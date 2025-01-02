@@ -8,30 +8,18 @@ pub fn check_mask(mask: DebugMask, log_level: usize) -> bool {
     true
 }
 
-#[cfg(all(not(feature = "std"), feature = "alloc"))]
-#[doc(hidden)]
-pub mod __log_macro_extern {
-    pub use alloc::ffi::CString;
-}
-#[cfg(feature = "std")]
-#[doc(hidden)]
-pub mod __log_macro_extern {
-    pub use std::ffi::CString;
-}
-
 /// Write to logger at a specified level.
 ///
 /// See [Logging](https://nginx.org/en/docs/dev/development_guide.html#logging)
 /// for available log levels.
 #[macro_export]
-#[cfg(feature = "alloc")]
 macro_rules! ngx_log_debug {
     ( $log:expr, $($arg:tt)* ) => {
         let log_level = unsafe { (*$log).log_level };
         if log_level != 0 {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -43,7 +31,6 @@ macro_rules! ngx_log_debug {
 ///
 /// [`NGX_LOG_DEBUG_HTTP`]: https://nginx.org/en/docs/dev/development_guide.html#logging
 #[macro_export]
-#[cfg(feature = "alloc")]
 macro_rules! ngx_log_debug_http {
     ( $request:expr, $($arg:tt)* ) => {
         let log = unsafe { (*$request.connection()).log };
@@ -60,14 +47,13 @@ macro_rules! ngx_log_debug_http {
 /// See <https://nginx.org/en/docs/dev/development_guide.html#logging> for details and available
 /// masks.
 #[macro_export]
-#[cfg(feature = "alloc")]
 macro_rules! ngx_log_debug_mask {
     ( DebugMask::Core, $log:expr, $($arg:tt)* ) => ({
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Core, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -77,8 +63,8 @@ macro_rules! ngx_log_debug_mask {
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Alloc, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -88,8 +74,8 @@ macro_rules! ngx_log_debug_mask {
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Mutex, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -99,8 +85,8 @@ macro_rules! ngx_log_debug_mask {
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Event, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -110,8 +96,8 @@ macro_rules! ngx_log_debug_mask {
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Http, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -121,8 +107,8 @@ macro_rules! ngx_log_debug_mask {
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Mail, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
@@ -132,8 +118,8 @@ macro_rules! ngx_log_debug_mask {
         let log_level = unsafe { (*$log).log_level };
         if $crate::log::check_mask(DebugMask::Stream, log_level) {
             let level = $crate::ffi::NGX_LOG_DEBUG as $crate::ffi::ngx_uint_t;
-            let fmt = $crate::log::__log_macro_extern::CString::new("%s").unwrap();
-            let c_message = $crate::log::__log_macro_extern::CString::new(format!($($arg)*)).unwrap();
+            let fmt = ::std::ffi::CString::new("%s").unwrap();
+            let c_message = ::std::ffi::CString::new(format!($($arg)*)).unwrap();
             unsafe {
                 $crate::ffi::ngx_log_error_core(level, $log, 0, fmt.as_ptr(), c_message.as_ptr());
             }
