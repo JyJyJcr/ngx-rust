@@ -60,7 +60,7 @@ impl NgxStr {
         str::from_utf8(self.as_bytes())
     }
 
-    /// Converts an [`NgxStr`] into a [`Cow<str>`], replacing invalid UTF-8 sequences.
+    /// Converts an [`NgxStr`] into a [`std::borrow::Cow<str>`], replacing invalid UTF-8 sequences.
     ///
     /// See [`String::from_utf8_lossy`].
     ///
