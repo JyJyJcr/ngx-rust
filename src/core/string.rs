@@ -1,11 +1,6 @@
 use core::slice;
 use core::str::{self, Utf8Error};
 
-#[cfg(all(not(feature = "std"), feature = "alloc"))]
-use alloc::{borrow::Cow, string::String};
-#[cfg(feature = "std")]
-use std::{borrow::Cow, string::String};
-
 use crate::ffi::*;
 
 /// Static string initializer for [`ngx_str_t`].
@@ -68,9 +63,11 @@ impl NgxStr {
     /// Converts an [`NgxStr`] into a [`Cow<str>`], replacing invalid UTF-8 sequences.
     ///
     /// See [`String::from_utf8_lossy`].
-    #[cfg(feature = "alloc")]
-    pub fn to_string_lossy(&self) -> Cow<str> {
-        String::from_utf8_lossy(self.as_bytes())
+    ///
+    /// This module is temporally available only with `std` feature.
+    #[cfg(feature = "std")]
+    pub fn to_string_lossy(&self) -> std::borrow::Cow<str> {
+        std::string::String::from_utf8_lossy(self.as_bytes())
     }
 
     /// Returns `true` if the [`NgxStr`] is empty, otherwise `false`.
