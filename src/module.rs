@@ -5,7 +5,7 @@ use crate::{
         ngx_uint_t, NGX_RS_MODULE_SIGNATURE,
     },
     ngx_null_command,
-    util::{unwrap_builder, ConcatPreArray, ConstArrayBuilder, PreArray, StaticRefMut},
+    util::{ConstArrayBuilder, StaticRefMut},
 };
 use ::core::{
     ffi::{c_char, c_void, CStr},
@@ -136,34 +136,26 @@ impl<M: Module> NgxModuleCommandsRefMut<M> {
 }
 
 /// Type safe wrapper of \[ngx_command_t\] by specifying `Module`.
-#[repr(C)]
-pub struct NgxModuleCommands<M: Module, const N: usize>([ngx_command_t; N], ngx_command_t, PhantomData<M>);
+pub struct NgxModuleCommands<M: Module, const N: usize>([ngx_command_t; N], PhantomData<M>);
 
 /// `NgxModuleCommands` builder.
-#[repr(C)]
-pub struct NgxModuleCommandsBuilder<M: Module, PA: PreArray<ngx_command_t>>(
-    ConstArrayBuilder<ngx_command_t, PA>,
-    PhantomData<M>,
-);
-impl<M: Module> NgxModuleCommandsBuilder<M, [ngx_command_t; 0]> {
-    /// Constructs new, empty builder.
+pub struct NgxModuleCommandsBuilder<M: Module, const N: usize>(ConstArrayBuilder<ngx_command_t, N>, PhantomData<M>);
+impl<M: Module, const N: usize> NgxModuleCommandsBuilder<M, N> {
+    /// Constructs new, empty builder with capacity size = N..
     pub const fn new() -> Self {
         Self(ConstArrayBuilder::new(), PhantomData)
     }
-}
-impl<M: Module, PA: PreArray<ngx_command_t>> NgxModuleCommandsBuilder<M, PA> {
     /// Add type implementing `Command` which is consistent with `M:Module` into array.
-    pub const fn add<C: Command>(self) -> NgxModuleCommandsBuilder<M, ConcatPreArray<ngx_command_t, PA, ngx_command_t>>
+    pub const fn add<C: Command>(mut self) -> Self
     where
         C::CallRule: CommandCallRule<M, Conf = C::Conf>,
     {
-        let builder = unsafe { unwrap_builder(self) };
-        NgxModuleCommandsBuilder(builder.push(command::<M, C>()), PhantomData)
+        self.0 = self.0.push(command::<M, C>());
+        self
     }
     /// Build `NgxModuleCommands`.
-    pub const fn build<const N: usize>(self) -> NgxModuleCommands<M, N> {
-        let builder: ConstArrayBuilder<ngx_command_t, PA> = unsafe { unwrap_builder(self) };
-        NgxModuleCommands(builder.build(), ngx_null_command!(), PhantomData)
+    pub const fn build(self) -> NgxModuleCommands<M, N> {
+        NgxModuleCommands(self.0.push(ngx_null_command!()).build(), PhantomData)
     }
 }
 
@@ -391,54 +383,34 @@ macro_rules! exhibit_modules {
 pub mod __macro {
     pub use core::{ffi::c_char, ptr::null};
 
-    use crate::{
-        ffi::ngx_module_t,
-        util::{unwrap_builder, ConcatPreArray, ConstArrayBuilder, PreArray},
-    };
+    use crate::{ffi::ngx_module_t, util::ConstArrayBuilder};
 
     use super::Module;
 
-    #[repr(C)]
-    pub struct NgxModulesBuilder<PA: PreArray<*const ngx_module_t>>(ConstArrayBuilder<*const ngx_module_t, PA>);
-    impl NgxModulesBuilder<[*const ngx_module_t; 0]> {
+    pub struct NgxModulesBuilder<const N: usize>(ConstArrayBuilder<*const ngx_module_t, N>);
+    impl<const N: usize> NgxModulesBuilder<N> {
         pub const fn new() -> Self {
             Self(ConstArrayBuilder::new())
         }
-    }
-    impl<PA: PreArray<*const ngx_module_t>> NgxModulesBuilder<PA> {
-        pub const fn add<M: Module>(
-            self,
-        ) -> NgxModulesBuilder<ConcatPreArray<*const ngx_module_t, PA, *const ngx_module_t>> {
-            let builder = unsafe { unwrap_builder(self) };
-            NgxModulesBuilder::<ConcatPreArray<*const ngx_module_t, PA, *const ngx_module_t>>(
-                builder.push(unsafe { &raw const M::SELF.to_ref().0 }),
-            )
+        pub const fn add<M: Module>(mut self) -> Self {
+            self.0 = self.0.push(unsafe { &raw const M::SELF.to_ref().0 });
+            self
         }
-        pub const fn build<const N: usize>(self) -> [*const ngx_module_t; N] {
-            let builder: ConstArrayBuilder<*const ngx_module_t, PA> = unsafe { unwrap_builder(self) };
-            builder.push([null()]).build()
+        pub const fn build(self) -> [*const ngx_module_t; N] {
+            self.0.push(null()).build()
         }
     }
-
-    #[repr(C)]
-    pub struct NgxModuleNamesBuilder<PA: PreArray<*const c_char>>(ConstArrayBuilder<*const c_char, PA>);
-    impl NgxModuleNamesBuilder<[*const c_char; 0]> {
+    pub struct NgxModuleNamesBuilder<const N: usize>(ConstArrayBuilder<*const c_char, N>);
+    impl<const N: usize> NgxModuleNamesBuilder<N> {
         pub const fn new() -> Self {
             Self(ConstArrayBuilder::new())
         }
-    }
-    impl<PA: PreArray<*const c_char>> NgxModuleNamesBuilder<PA> {
-        pub const fn add<M: Module>(
-            self,
-        ) -> NgxModuleNamesBuilder<ConcatPreArray<*const c_char, PA, [*const c_char; 1]>> {
-            let builder = unsafe { unwrap_builder(self) };
-            NgxModuleNamesBuilder::<ConcatPreArray<*const c_char, PA, [*const c_char; 1]>>(
-                builder.push([M::NAME.as_ptr()]),
-            )
+        pub const fn add<M: Module>(mut self) -> Self {
+            self.0 = self.0.push(M::NAME.as_ptr());
+            self
         }
-        pub const fn build<const N: usize>(self) -> [*const c_char; N] {
-            let builder: ConstArrayBuilder<*const c_char, PA> = unsafe { unwrap_builder(self) };
-            builder.push([null()]).build()
+        pub const fn build(self) -> [*const c_char; N] {
+            self.0.push(null()).build()
         }
     }
 }
