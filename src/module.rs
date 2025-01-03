@@ -100,6 +100,14 @@ impl<M: Module> NgxModule<M> {
             PhantomData,
         )
     }
+    /// Get inner ngx_module_t immutable reference.
+    pub const fn inner(&self) -> &ngx_module_t {
+        &self.0
+    }
+    /// Get inner ngx_module_t mutable reference.
+    pub const fn inner_mut(&mut self) -> &mut ngx_module_t {
+        &mut self.0
+    }
 }
 
 /// Module type signature.
