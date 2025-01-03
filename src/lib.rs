@@ -64,6 +64,12 @@ pub mod http;
 #[cfg(feature = "std")]
 pub mod log;
 
+/// The test utility module.
+///
+/// This module provides utilities for integration tests with bundled NGINX.
+#[cfg(feature = "test_util")]
+pub mod test_util;
+
 /// The module module.
 ///
 /// This module type-centered wrapper for declaring NGINX module.
