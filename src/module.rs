@@ -307,11 +307,11 @@ unsafe extern "C" fn command_handler<M: Module, C: Command>(
     NGX_CONF_ERROR as *mut c_char
 }
 
-/// Delegete type of pre-cycle delegate.
+/// Delegete type of pre-cycle initialization.
 pub trait PreCycleDelegate {
-    /// initialize in pre-cycle.
+    /// Initialize in pre-cycle.
     fn init(log: &mut ngx_log_t) -> ngx_int_t;
-    /// Unsafe `init`` wrapper for pointer usage
+    /// Unsafe `init` wrapper for pointer usage.
     unsafe extern "C" fn init_unsafe(log: *mut ngx_log_t) -> ngx_int_t {
         Self::init(&mut *log)
     }
@@ -325,17 +325,17 @@ impl PreCycleDelegate for () {
     const INIT: Option<unsafe extern "C" fn(*mut ngx_log_t) -> ngx_int_t> = None;
 }
 
-/// Delegete type of in-cycle delegate.
+/// Delegete type of in-cycle initialization and finalization.
 pub trait CycleDelegate {
     /// initialize in cycle start time.
     fn init(cycle: &mut ngx_cycle_t) -> ngx_int_t;
     /// finalize in cycle end time.
     fn exit(cycle: &mut ngx_cycle_t);
-    /// Unsafe `init`` wrapper for pointer usage
+    /// Unsafe `init` wrapper for pointer usage.
     unsafe extern "C" fn init_unsafe(cycle: *mut ngx_cycle_t) -> ngx_int_t {
         Self::init(&mut *cycle)
     }
-    /// Unsafe `exit`` wrapper for pointer usage
+    /// Unsafe `exit` wrapper for pointer usage.
     unsafe extern "C" fn exit_unsafe(cycle: *mut ngx_cycle_t) {
         Self::exit(&mut *cycle)
     }
