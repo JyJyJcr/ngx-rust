@@ -72,13 +72,19 @@ pub trait Module: Sized + 'static {
 
 /// Type safe wrapper of `ngx_module_t` by specifying `Module`.
 pub struct NgxModule<M: Module>(ngx_module_t, PhantomData<M>);
+impl<M: Module> Default for NgxModule<M> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M: Module> NgxModule<M> {
     /// Construct this type.
     pub const fn new() -> Self {
         Self(
             ngx_module_t {
                 ctx: M::CTX.to_mut_ptr() as *mut _,
-                commands: &raw mut unsafe { &mut M::COMMANDS.1.to_mut() }[0],
+                commands: &raw mut unsafe { M::COMMANDS.1.to_mut() }[0],
                 type_: M::TYPE.to_ngx_uint(),
 
                 init_master: M::MasterInitializer::INIT,
@@ -116,6 +122,8 @@ impl ModuleSignature {
 pub struct NgxModuleCtx<M: Module>(M::Ctx);
 impl<M: Module> NgxModuleCtx<M> {
     /// Construct this type from raw ctx value.
+    /// # Safety
+    /// Callers should provide proper Context object consistent with `M:Module`.
     pub const unsafe fn from_raw(inner: M::Ctx) -> Self {
         Self(inner)
     }
@@ -140,6 +148,12 @@ pub struct NgxModuleCommands<M: Module, const N: usize>([ngx_command_t; N], Phan
 
 /// `NgxModuleCommands` builder.
 pub struct NgxModuleCommandsBuilder<M: Module, const N: usize>(ConstArrayBuilder<ngx_command_t, N>, PhantomData<M>);
+impl<M: Module, const N: usize> Default for NgxModuleCommandsBuilder<M, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M: Module, const N: usize> NgxModuleCommandsBuilder<M, N> {
     /// Constructs new, empty builder with capacity size = N..
     pub const fn new() -> Self {
@@ -159,6 +173,10 @@ impl<M: Module, const N: usize> NgxModuleCommandsBuilder<M, N> {
     }
 }
 
+/// Command derivative handler error.
+#[derive(Debug)]
+pub struct CommandError;
+
 /// Type safe command interface.
 pub trait Command {
     /// Type expressing call rule.
@@ -170,7 +188,7 @@ pub trait Command {
     /// Arg Flags.
     const ARG_FLAG: CommandArgFlagSet;
     /// handle command directive
-    fn handler(cf: &mut ngx_conf_t, conf: &mut <Self::CallRule as CommandCallRule>::Conf) -> Result<(), ()>;
+    fn handler(cf: &mut ngx_conf_t, conf: &mut <Self::CallRule as CommandCallRule>::Conf) -> Result<(), CommandError>;
 }
 
 /// Command call interface containing information for proper call.
@@ -195,7 +213,7 @@ impl CommandOffset {
     pub const unsafe fn from_ngx_uint(offset: ngx_uint_t) -> Self {
         Self(offset)
     }
-    const fn to_ngx_uint(self) -> ngx_uint_t {
+    const fn into_ngx_uint(self) -> ngx_uint_t {
         self.0
     }
 }
@@ -288,14 +306,14 @@ where
     ngx_command_t {
         name: C::NAME,
         type_: C::CONTEXT_FLAG.to_ngx_uint() | C::ARG_FLAG.to_ngx_uint(),
-        set: Some(command_handler::<M, C>),
-        conf: <C::CallRule as CommandCallRuleBy<M>>::OFFSET.to_ngx_uint(),
+        set: Some(command_handler::<C>),
+        conf: <C::CallRule as CommandCallRuleBy<M>>::OFFSET.into_ngx_uint(),
         offset: 0,
         post: null_mut(),
     }
 }
 
-unsafe extern "C" fn command_handler<M: Module, C: Command>(
+unsafe extern "C" fn command_handler<C: Command>(
     cf: *mut ngx_conf_t,
     _cmd: *mut ngx_command_t,
     conf: *mut c_void,
@@ -312,6 +330,9 @@ pub trait PreCycleDelegate {
     /// Initialize in pre-cycle.
     fn init(log: &mut ngx_log_t) -> ngx_int_t;
     /// Unsafe `init` wrapper for pointer usage.
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_log_t` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn init_unsafe(log: *mut ngx_log_t) -> ngx_int_t {
         Self::init(&mut *log)
     }
@@ -332,10 +353,17 @@ pub trait CycleDelegate {
     /// finalize in cycle end time.
     fn exit(cycle: &mut ngx_cycle_t);
     /// Unsafe `init` wrapper for pointer usage.
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_cycle_t` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn init_unsafe(cycle: *mut ngx_cycle_t) -> ngx_int_t {
         Self::init(&mut *cycle)
     }
     /// Unsafe `exit` wrapper for pointer usage.
+    ///
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_cycle_t` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn exit_unsafe(cycle: *mut ngx_cycle_t) {
         Self::exit(&mut *cycle)
     }
@@ -390,6 +418,12 @@ pub mod __macro {
     use super::Module;
 
     pub struct NgxModulesBuilder<const N: usize>(ConstArrayBuilder<*const ngx_module_t, N>);
+    impl<const N: usize> Default for NgxModulesBuilder<N> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl<const N: usize> NgxModulesBuilder<N> {
         pub const fn new() -> Self {
             Self(ConstArrayBuilder::new())
@@ -403,6 +437,12 @@ pub mod __macro {
         }
     }
     pub struct NgxModuleNamesBuilder<const N: usize>(ConstArrayBuilder<*const c_char, N>);
+    impl<const N: usize> Default for NgxModuleNamesBuilder<N> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl<const N: usize> NgxModuleNamesBuilder<N> {
         pub const fn new() -> Self {
             Self(ConstArrayBuilder::new())

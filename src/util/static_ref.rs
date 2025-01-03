@@ -32,10 +32,16 @@ impl<E: 'static + ?Sized> StaticRefMut<E> {
         Self(unsafe { NonNull::new_unchecked(e) })
     }
     /// Converts this type into a static immutable reference.
+    ///
+    /// # Safety
+    /// This sunction is marked unsafe because provide a reference to static mutable
     pub const unsafe fn to_ref(self) -> &'static E {
         unsafe { self.0.as_ref() }
     }
     /// Converts this type into a static mutable reference.
+    ///
+    /// # Safety
+    /// This sunction is marked unsafe because provide a reference to static mutable
     pub const unsafe fn to_mut(mut self) -> &'static mut E {
         self.0.as_mut()
     }
@@ -104,8 +110,8 @@ mod test {
 
         // mutable static access is always unsafe.
         let a_value = unsafe { B }; // actually this is Copy trait
-        let a_ref: &_ = unsafe { &*&raw const B };
-        let a_mut: &mut _ = unsafe { &mut *&raw mut B };
+        let a_ref: &_ = unsafe { &*addr_of!(B) };
+        let a_mut: &mut _ = unsafe { &mut *addr_of_mut!(B) };
         // StaticRefMut follow the rule.
         let a_ref_from_mut: &_ = unsafe { B_MUT.to_ref() };
         let a_mut_from_mut: &mut _ = unsafe { B_MUT.to_mut() };

@@ -20,7 +20,7 @@ use ::core::marker::PhantomData;
 use std::ffi::{c_char, c_void, CStr};
 use std::ptr::{addr_of, null_mut};
 
-use super::{Merge, Request};
+use super::{Merge, MergeConfigError, Request};
 
 /// Wrapper of `HttpModule` implementing `Module`.
 pub struct HttpModuleSkel<M: HttpModule>(PhantomData<M>);
@@ -40,6 +40,12 @@ impl<M: HttpModule> Module for HttpModuleSkel<M> {
 
 /// Type safe wrapper of `ngx_module_t` and `ngx_http_module_t` by specifying `Module`.
 pub struct NgxHttpModule<M: HttpModule>(NgxModule<HttpModuleSkel<M>>, NgxModuleCtx<HttpModuleSkel<M>>);
+impl<M: HttpModule> Default for NgxHttpModule<M> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<M: HttpModule> NgxHttpModule<M> {
     /// Construct this type.
     pub const fn new() -> Self {
@@ -91,7 +97,7 @@ pub trait HttpModule: Sized + 'static {
     type SrvConfSetting: MergeConfSetting;
     /// Type deligating `create_loc_conf` and `merge_loc_conf`, and specifying LocConf type.
     type LocConfSetting: MergeConfSetting;
-    ///
+    /// Context type of Http request bound with this module.
     type Ctx;
 }
 
@@ -100,6 +106,10 @@ pub trait ConfigurationDelegate {
     /// Module level configuration.
     fn configuration(cf: &mut ngx_conf_t) -> Result<(), Status>;
     /// Unsafe `configuration` wrapper for pointer usage.
+    ///
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_conf_t` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn configuration_unsafe(cf: *mut ngx_conf_t) -> ngx_int_t {
         Self::configuration(&mut *cf).err().unwrap_or(Status::NGX_OK).into()
     }
@@ -114,13 +124,34 @@ impl ConfigurationDelegate for () {
     const CONFIGURATION: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> ngx_int_t> = None;
 }
 
+/// Error for creating conf.
+#[derive(Debug)]
+pub struct ConfCreateError;
+/// Error for initing conf.
+#[derive(Debug)]
+pub struct ConfInitError;
+/// Error for merging conf.
+#[derive(Debug)]
+pub struct ConfMergeError;
+impl From<MergeConfigError> for ConfMergeError {
+    fn from(value: MergeConfigError) -> Self {
+        match value {
+            MergeConfigError::NoValue => ConfMergeError,
+        }
+    }
+}
+
 /// Delegete type of conf object level configuration with init.
 pub trait InitConfSetting {
     /// Conf type.
     type Conf;
     /// create conf object.
-    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ()>;
+    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ConfCreateError>;
     /// Unsafe `create` wrapper for pointer usage.
+    ///
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_conf_t` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn create_unsafe(cf: *mut ngx_conf_t) -> *mut c_void {
         let mut pool = Pool::from_ngx_pool((*cf).pool);
         if let Ok(conf) = Self::create(&mut *cf) {
@@ -129,8 +160,12 @@ pub trait InitConfSetting {
         null_mut()
     }
     /// init conf object.
-    fn init(cf: &mut ngx_conf_t, conf: &mut Self::Conf) -> Result<(), ()>;
+    fn init(cf: &mut ngx_conf_t, conf: &mut Self::Conf) -> Result<(), ConfInitError>;
     /// Unsafe `init` wrapper for pointer usage.
+    ///
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_conf_t` and `c_void` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn init_unsafe(cf: *mut ngx_conf_t, conf: *mut c_void) -> *mut c_char {
         if Self::init(&mut *cf, &mut *(conf as *mut _)).is_ok() {
             return null_mut();
@@ -149,11 +184,11 @@ pub struct DefaultInit<C: Default>(PhantomData<C>);
 impl<C: Default> InitConfSetting for DefaultInit<C> {
     type Conf = C;
 
-    fn create(_cf: &mut ngx_conf_t) -> Result<Self::Conf, ()> {
+    fn create(_cf: &mut ngx_conf_t) -> Result<Self::Conf, ConfCreateError> {
         Ok(Default::default())
     }
 
-    fn init(_cf: &mut ngx_conf_t, _conf: &mut Self::Conf) -> Result<(), ()> {
+    fn init(_cf: &mut ngx_conf_t, _conf: &mut Self::Conf) -> Result<(), ConfInitError> {
         Ok(())
     }
 }
@@ -163,8 +198,12 @@ pub trait MergeConfSetting {
     /// Conf type.
     type Conf;
     /// create conf object.
-    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ()>;
+    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ConfCreateError>;
     /// Unsafe `create` wrapper for pointer usage.
+    ///
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_conf_t` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn create_unsafe(cf: *mut ngx_conf_t) -> *mut c_void {
         let mut pool = Pool::from_ngx_pool((*cf).pool);
         if let Ok(conf) = Self::create(&mut *cf) {
@@ -173,8 +212,12 @@ pub trait MergeConfSetting {
         null_mut()
     }
     /// merge conf objects.
-    fn merge(cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ()>;
+    fn merge(cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ConfMergeError>;
     /// Unsafe `merge` wrapper for pointer usage.
+    ///
+    /// # Safety
+    /// Callers should provide valid non-null `ngx_conf_t` and `c_void` arguments. Implementers must
+    /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn merge_unsafe(cf: *mut ngx_conf_t, prev: *mut c_void, conf: *mut c_void) -> *mut c_char {
         if Self::merge(&mut *cf, &mut *(prev as *mut _), &mut *(conf as *mut _)).is_ok() {
             return null_mut();
@@ -193,12 +236,12 @@ pub struct DefaultMerge<C: Default + Merge>(PhantomData<C>);
 impl<C: Default + Merge> MergeConfSetting for DefaultMerge<C> {
     type Conf = C;
 
-    fn create(_cf: &mut ngx_conf_t) -> Result<Self::Conf, ()> {
+    fn create(_cf: &mut ngx_conf_t) -> Result<Self::Conf, ConfCreateError> {
         Ok(Default::default())
     }
 
-    fn merge(_cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ()> {
-        conf.merge(prev).map_err(|_| ())
+    fn merge(_cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ConfMergeError> {
+        conf.merge(prev).map_err(|e| e.into())
     }
 }
 
@@ -263,7 +306,7 @@ pub enum Phase {
     Log,
 }
 impl Phase {
-    const fn to_ngx_http_phases(self) -> ngx_http_phases {
+    const fn into_ngx_http_phases(self) -> ngx_http_phases {
         use Phase::*;
         match self {
             PostRead => ngx_http_phases_NGX_HTTP_POST_READ_PHASE,
@@ -292,7 +335,7 @@ impl SetHttpHandler for ngx_conf_t {
             unsafe { crate::http::ngx_http_conf_get_module_main_conf(self, &*addr_of!(ngx_http_core_module)).as_mut() }
                 .ok_or(Status::NGX_ERROR)?;
         let pointer = unsafe {
-            (ngx_array_push(&mut conf.phases[H::PHASE.to_ngx_http_phases() as usize].handlers)
+            (ngx_array_push(&mut conf.phases[H::PHASE.into_ngx_http_phases() as usize].handlers)
                 as *mut ngx_http_handler_pt)
                 .as_mut()
         }
@@ -312,5 +355,5 @@ pub trait HttpHandler {
 
 unsafe extern "C" fn handle_func<H: HttpHandler>(request: *mut ngx_http_request_t) -> ngx_int_t {
     let req = Request::from_ngx_http_request(request);
-    return H::handle(req).into();
+    H::handle(req).into()
 }
