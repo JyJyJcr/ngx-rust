@@ -148,7 +148,7 @@ impl<M: Module, const N: usize> NgxModuleCommandsBuilder<M, N> {
     /// Add type implementing `Command` which is consistent with `M:Module` into array.
     pub const fn add<C: Command>(mut self) -> Self
     where
-        C::CallRule: CommandCallRule<M, Conf = C::Conf>,
+        C::CallRule: CommandCallRuleBy<M>,
     {
         self.0 = self.0.push(command::<M, C>());
         self
@@ -161,10 +161,8 @@ impl<M: Module, const N: usize> NgxModuleCommandsBuilder<M, N> {
 
 /// Type safe command interface.
 pub trait Command {
-    /// Conf type `handle` passed.
-    type Conf;
     /// Type expressing call rule.
-    type CallRule;
+    type CallRule: CommandCallRule;
     /// Command name.
     const NAME: ngx_str_t;
     /// Context Flags.
@@ -172,13 +170,17 @@ pub trait Command {
     /// Arg Flags.
     const ARG_FLAG: CommandArgFlagSet;
     /// handle command directive
-    fn handler(cf: &mut ngx_conf_t, conf: &mut Self::Conf) -> Result<(), ()>;
+    fn handler(cf: &mut ngx_conf_t, conf: &mut <Self::CallRule as CommandCallRule>::Conf) -> Result<(), ()>;
 }
 
 /// Command call interface containing information for proper call.
-pub trait CommandCallRule<M: Module> {
+pub trait CommandCallRule {
     /// Conf type.
     type Conf;
+}
+
+/// Command call interface containing information for proper call by M:`Module`.
+pub trait CommandCallRuleBy<M: Module>: CommandCallRule {
     /// Offset.
     const OFFSET: CommandOffset;
 }
@@ -281,13 +283,13 @@ macro_rules! arg_flags {
 
 const fn command<M: Module, C: Command>() -> ngx_command_t
 where
-    C::CallRule: CommandCallRule<M, Conf = C::Conf>,
+    C::CallRule: CommandCallRuleBy<M>,
 {
     ngx_command_t {
         name: C::NAME,
         type_: C::CONTEXT_FLAG.to_ngx_uint() | C::ARG_FLAG.to_ngx_uint(),
         set: Some(command_handler::<M, C>),
-        conf: <C::CallRule as CommandCallRule<M>>::OFFSET.to_ngx_uint(),
+        conf: <C::CallRule as CommandCallRuleBy<M>>::OFFSET.to_ngx_uint(),
         offset: 0,
         post: null_mut(),
     }
