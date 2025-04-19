@@ -1,9 +1,22 @@
-use std::ffi::{c_char, c_void};
+use std::ffi::c_char;
+use std::ffi::c_void;
+use std::ffi::CStr;
+use std::marker::PhantomData;
 use std::ptr;
 
 use crate::core::NGX_CONF_ERROR;
 use crate::core::*;
 use crate::ffi::*;
+use crate::module::CycleDelegate;
+use crate::module::PreCycleDelegate;
+use crate::util::StaticRefMut;
+
+use super::ConfigurationDelegate;
+use super::HttpModule;
+use super::InitConfSetting;
+use super::MergeConfSetting;
+use super::NgxHttpModule;
+use super::NgxHttpModuleCommandsRefMut;
 
 /// MergeConfigError - configuration cannot be merged with levels above.
 #[derive(Debug)]
@@ -129,5 +142,115 @@ pub trait HTTPModule {
             Ok(_) => ptr::null_mut(),
             Err(_) => NGX_CONF_ERROR as _,
         }
+    }
+}
+
+pub trait HTTPModuleSupplement<M: HTTPModule + 'static>: 'static + Sized {
+    const SELF: StaticRefMut<NgxHttpModule<(M, Self)>>;
+    const NAME: &'static CStr;
+    const COMMANDS: NgxHttpModuleCommandsRefMut<(M, Self)>;
+
+    /// exexutor type deligating `init_master` (not called now).
+    type MasterInitializer: PreCycleDelegate;
+    /// exexutor type deligating `init_module` and `exit_master`.
+    type ModuleDelegate: CycleDelegate;
+    /// exexutor type deligating `init_process` and `exit_process`.
+    type ProcessDelegate: CycleDelegate;
+    /// exexutor type deligating `init_thread` and `exit_thread` (not called now).
+    type ThreadDelegate: CycleDelegate;
+
+    type Ctx;
+}
+
+impl<M: HTTPModule + 'static, MS: HTTPModuleSupplement<M>> HttpModule for (M, MS) {
+    const SELF: StaticRefMut<NgxHttpModule<(M, MS)>> = MS::SELF;
+    const NAME: &'static CStr = MS::NAME;
+    const COMMANDS: NgxHttpModuleCommandsRefMut<Self> = MS::COMMANDS;
+
+    type MasterInitializer = MS::MasterInitializer;
+    type ModuleDelegate = MS::ModuleDelegate;
+    type ProcessDelegate = MS::ProcessDelegate;
+    type ThreadDelegate = MS::ThreadDelegate;
+
+    type PreConfiguration = HTTPModulePreConfiguration<M>;
+    type PostConfiguration = HTTPModulePostConfiguration<M>;
+    type MainConfSetting = HTTPModuleMainConfSetting<M>;
+    type SrvConfSetting = HTTPModuleSrvConfSetting<M>;
+    type LocConfSetting = HTTPModuleLocConfSetting<M>;
+
+    type Ctx = MS::Ctx;
+}
+
+pub struct HTTPModulePreConfiguration<M: HTTPModule>(PhantomData<M>);
+impl<M: HTTPModule> ConfigurationDelegate for HTTPModulePreConfiguration<M> {
+    fn configuration(_cf: &mut ngx_conf_t) -> Result<(), Status> {
+        unimplemented!()
+    }
+    unsafe extern "C" fn configuration_unsafe(cf: *mut ngx_conf_t) -> ngx_int_t {
+        M::preconfiguration(cf)
+    }
+}
+pub struct HTTPModulePostConfiguration<M: HTTPModule>(PhantomData<M>);
+impl<M: HTTPModule> ConfigurationDelegate for HTTPModulePostConfiguration<M> {
+    fn configuration(_cf: &mut ngx_conf_t) -> Result<(), Status> {
+        unimplemented!()
+    }
+    unsafe extern "C" fn configuration_unsafe(cf: *mut ngx_conf_t) -> ngx_int_t {
+        M::postconfiguration(cf)
+    }
+}
+
+pub struct HTTPModuleMainConfSetting<M: HTTPModule>(PhantomData<M>);
+impl<M: HTTPModule> InitConfSetting for HTTPModuleMainConfSetting<M> {
+    type Conf = M::MainConf;
+
+    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ()> {
+        unimplemented!()
+    }
+
+    fn init(cf: &mut ngx_conf_t, conf: &mut Self::Conf) -> Result<(), ()> {
+        unimplemented!()
+    }
+    unsafe extern "C" fn create_unsafe(cf: *mut ngx_conf_t) -> *mut c_void {
+        M::create_main_conf(cf)
+    }
+    unsafe extern "C" fn init_unsafe(cf: *mut ngx_conf_t, conf: *mut c_void) -> *mut c_char {
+        M::init_main_conf(cf, conf)
+    }
+}
+
+pub struct HTTPModuleSrvConfSetting<M: HTTPModule>(PhantomData<M>);
+impl<M: HTTPModule> MergeConfSetting for HTTPModuleSrvConfSetting<M> {
+    type Conf = M::SrvConf;
+
+    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ()> {
+        unimplemented!()
+    }
+    fn merge(cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ()> {
+        unimplemented!()
+    }
+    unsafe extern "C" fn create_unsafe(cf: *mut ngx_conf_t) -> *mut c_void {
+        M::create_srv_conf(cf)
+    }
+    unsafe extern "C" fn merge_unsafe(cf: *mut ngx_conf_t, prev: *mut c_void, conf: *mut c_void) -> *mut c_char {
+        M::merge_srv_conf(cf, prev, conf)
+    }
+}
+
+pub struct HTTPModuleLocConfSetting<M: HTTPModule>(PhantomData<M>);
+impl<M: HTTPModule> MergeConfSetting for HTTPModuleLocConfSetting<M> {
+    type Conf = M::LocConf;
+
+    fn create(cf: &mut ngx_conf_t) -> Result<Self::Conf, ()> {
+        unimplemented!()
+    }
+    fn merge(cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ()> {
+        unimplemented!()
+    }
+    unsafe extern "C" fn create_unsafe(cf: *mut ngx_conf_t) -> *mut c_void {
+        M::create_loc_conf(cf)
+    }
+    unsafe extern "C" fn merge_unsafe(cf: *mut ngx_conf_t, prev: *mut c_void, conf: *mut c_void) -> *mut c_char {
+        M::merge_loc_conf(cf, prev, conf)
     }
 }
