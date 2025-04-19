@@ -52,6 +52,9 @@ name = "type_driven"
 path = "type_driven.rs"
 crate-type = ["cdylib"]
 
+[example.type_driven.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(static_ref_mut)'] }
+
 [features]
 default = ["export-modules", "ngx/vendored"]
 # Generate `ngx_modules` table with module exports

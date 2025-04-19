@@ -1,12 +1,11 @@
 use std::ffi::CStr;
-use std::ptr::addr_of_mut;
 
 use ngx::ffi::{ngx_conf_t, ngx_str_t};
-use ngx::http::{HttpMainConf, HttpModuleSkel};
+use ngx::http::HttpMainConf;
 use ngx::module::{
     CommandArgFlag, CommandArgFlagSet, CommandCallRule, CommandContextFlag, CommandContextFlagSet, CommandError,
 };
-use ngx::{arg_flags, context_flags, ngx_string};
+use ngx::{arg_flags, context_flags, exhibit_modules, ngx_string};
 use ngx::{
     http::{DefaultInit, DefaultMerge, HttpModule, NgxHttpModule, NgxHttpModuleCommands},
     module::{Command, NgxModuleCommandsBuilder},
@@ -14,9 +13,38 @@ use ngx::{
 
 #[cfg(static_ref_mut)]
 use ngx::{exhibit_modules, http::NgxHttpModuleCommandsRefMut, util::StaticRefMut};
+#[cfg(not(static_ref_mut))]
+use std::ptr::addr_of_mut;
+
+#[cfg(not(static_ref_mut))]
+use ngx::{
+    http::HttpModuleSkel,
+    module::{NgxModule, NgxModuleCtx},
+    ngx_modules,
+};
+#[cfg(not(static_ref_mut))]
+use std::ptr::addr_of;
 
 #[cfg(all(static_ref_mut, feature = "export-modules"))]
 exhibit_modules!(HttpModuleSkel<FooBarHttpModule>);
+
+#[cfg(all(not(static_ref_mut), feature = "export-modules"))]
+exhibit_modules!(HttpModuleSkel<FooBarHttpModule> => &mut FOO_BAR_HTTP_MODULE);
+
+#[cfg(not(static_ref_mut))]
+static mut FOO_BAR_HTTP_MODULE: NgxModule<HttpModuleSkel<FooBarHttpModule>> = unsafe {
+    NgxModule::new_from_ptr(
+        addr_of!(FOO_BAR_HTTP_MODULE_CTX),
+        addr_of!(FOO_BAR_HTTP_MODULE_COMMANDS),
+    )
+};
+#[cfg(not(static_ref_mut))]
+static mut FOO_BAR_HTTP_MODULE_CTX: NgxModuleCtx<HttpModuleSkel<FooBarHttpModule>> =
+    unsafe { NgxModuleCtx::from_raw() };
+
+#[cfg(not(static_ref_mut))]
+static mut FOO_BAR_HTTP_MODULE_COMMANDS: NgxHttpModuleCommands<FooBarHttpModule, { 1 + 1 }> =
+    NgxModuleCommandsBuilder::new().add::<FooBarCommand>().build();
 
 struct FooBarHttpModule;
 impl HttpModule for FooBarHttpModule {
