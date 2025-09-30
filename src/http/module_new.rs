@@ -5,8 +5,8 @@ use nginx_sys::{
     ngx_http_phases_NGX_HTTP_POST_ACCESS_PHASE, ngx_http_phases_NGX_HTTP_POST_READ_PHASE,
     ngx_http_phases_NGX_HTTP_POST_REWRITE_PHASE, ngx_http_phases_NGX_HTTP_PREACCESS_PHASE,
     ngx_http_phases_NGX_HTTP_PRECONTENT_PHASE, ngx_http_phases_NGX_HTTP_REWRITE_PHASE,
-    ngx_http_phases_NGX_HTTP_SERVER_REWRITE_PHASE, ngx_http_request_t, ngx_int_t, ngx_uint_t,
-    NGX_RS_HTTP_LOC_CONF_OFFSET, NGX_RS_HTTP_MAIN_CONF_OFFSET, NGX_RS_HTTP_SRV_CONF_OFFSET,
+    ngx_http_phases_NGX_HTTP_SERVER_REWRITE_PHASE, ngx_http_request_t, ngx_int_t, ngx_uint_t, NGX_HTTP_LOC_CONF_OFFSET,
+    NGX_HTTP_MAIN_CONF_OFFSET, NGX_HTTP_SRV_CONF_OFFSET,
 };
 
 use crate::core::{Pool, Status, NGX_CONF_ERROR};
@@ -254,7 +254,7 @@ impl<C> CommandCallRule for HttpMainConf<C> {
 impl<M: HttpModule> CommandCallRuleBy<HttpModuleSkel<M>>
     for HttpMainConf<<M::MainConfSetting as InitConfSetting>::Conf>
 {
-    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_RS_HTTP_MAIN_CONF_OFFSET) };
+    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_HTTP_MAIN_CONF_OFFSET) };
 }
 
 /// `CommandCallRule` implementer for `Command` configuring Http Main Conf
@@ -266,7 +266,7 @@ impl<C> CommandCallRule for HttpSrvConf<C> {
 impl<M: HttpModule> CommandCallRuleBy<HttpModuleSkel<M>>
     for HttpSrvConf<<M::SrvConfSetting as MergeConfSetting>::Conf>
 {
-    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_RS_HTTP_SRV_CONF_OFFSET) };
+    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_HTTP_SRV_CONF_OFFSET) };
 }
 
 /// `CommandCallRule` implementer for `Command` configuring Http Main Conf
@@ -277,7 +277,7 @@ impl<C> CommandCallRule for HttpLocConf<C> {
 impl<M: HttpModule> CommandCallRuleBy<HttpModuleSkel<M>>
     for HttpLocConf<<M::LocConfSetting as MergeConfSetting>::Conf>
 {
-    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_RS_HTTP_LOC_CONF_OFFSET) };
+    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_HTTP_LOC_CONF_OFFSET) };
 }
 
 /// Http configuration phase.
