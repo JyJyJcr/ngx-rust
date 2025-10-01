@@ -1,17 +1,17 @@
 use crate::{
     core::NGX_CONF_ERROR,
     ffi::{
-        nginx_version, ngx_command_t, ngx_conf_t, ngx_cycle_t, ngx_int_t, ngx_log_t, ngx_module_t, ngx_str_t,
-        ngx_uint_t, NGX_RS_MODULE_SIGNATURE,
+        nginx_version, ngx_command_t, ngx_conf_t, ngx_cycle_t, ngx_int_t, ngx_log_t, ngx_module_t,
+        ngx_str_t, ngx_uint_t, NGX_RS_MODULE_SIGNATURE,
     },
-    ngx_null_command,
-    util::{ConstArrayBuilder, StaticRefMut},
+    util::ConstArrayBuilder,
 };
 use ::core::{
     ffi::{c_char, c_void, CStr},
     marker::PhantomData,
     ptr::null_mut,
 };
+use core::cell::UnsafeCell;
 
 /// default (unimplemented) `ngx_module_t` template.
 pub const NGX_MODULE_EMPTY: ngx_module_t = ngx_module_t {
@@ -48,7 +48,7 @@ pub const NGX_MODULE_EMPTY: ngx_module_t = ngx_module_t {
 /// Type safe interface expressing unique Nginx module.
 pub trait Module: Sized + 'static {
     /// Wrapper of static mutable `NgxModule` object expressing this module.
-    const SELF: StaticRefMut<NgxModule<Self>>;
+    const SELF: &'static NgxModule<Self>;
     /// CStr module name expression.
     const NAME: &'static CStr;
     /// Module sigunature.
@@ -56,9 +56,9 @@ pub trait Module: Sized + 'static {
     /// Module context type.
     type Ctx: 'static;
     ///  Wrapper of static mutable `NgxModuleCtx` object bound to this module as context object.
-    const CTX: StaticRefMut<NgxModuleCtx<Self>>;
+    const CTX: &'static NgxModuleCtx<Self>;
     ///  Wrapper of static mutable `NgxModuleCommands` object bound to this module.
-    const COMMANDS: NgxModuleCommandsRefMut<Self>;
+    const COMMANDS: NgxModuleCommandsPtr<Self>;
 
     /// Type deligating `init_master` (not called now).
     type MasterInitializer: PreCycleDelegate;
@@ -71,7 +71,7 @@ pub trait Module: Sized + 'static {
 }
 
 /// Type safe wrapper of `ngx_module_t` by specifying `Module`.
-pub struct NgxModule<M: Module>(ngx_module_t, PhantomData<M>);
+pub struct NgxModule<M: Module>(UnsafeCell<ngx_module_t>, PhantomData<M>);
 impl<M: Module> Default for NgxModule<M> {
     fn default() -> Self {
         Self::new()
@@ -82,9 +82,9 @@ impl<M: Module> NgxModule<M> {
     /// Construct this type.
     pub const fn new() -> Self {
         Self(
-            ngx_module_t {
-                ctx: M::CTX.to_mut_ptr() as *mut _,
-                commands: &raw mut unsafe { M::COMMANDS.1.to_mut() }[0],
+            UnsafeCell::new(ngx_module_t {
+                ctx: M::CTX.0.get() as *mut _,
+                commands: M::COMMANDS.1 as *mut _,
                 type_: M::TYPE.to_ngx_uint(),
 
                 init_master: M::MasterInitializer::INIT,
@@ -96,17 +96,17 @@ impl<M: Module> NgxModule<M> {
                 exit_master: M::ModuleDelegate::EXIT,
 
                 ..NGX_MODULE_EMPTY
-            },
+            }),
             PhantomData,
         )
     }
     /// Get inner ngx_module_t immutable reference.
     pub const fn inner(&self) -> &ngx_module_t {
-        &self.0
+        unsafe { &*(self.0.get() as *const _) }
     }
     /// Get inner ngx_module_t mutable reference.
     pub const fn inner_mut(&mut self) -> &mut ngx_module_t {
-        &mut self.0
+        self.0.get_mut()
     }
 }
 
@@ -127,35 +127,41 @@ impl ModuleSignature {
 }
 
 /// Type safe wrapper of ctx by specifying `Module`.
-pub struct NgxModuleCtx<M: Module>(M::Ctx);
+pub struct NgxModuleCtx<M: Module>(UnsafeCell<M::Ctx>);
 impl<M: Module> NgxModuleCtx<M> {
     /// Construct this type from raw ctx value.
     /// # Safety
     /// Callers should provide proper Context object consistent with `M:Module`.
     pub const unsafe fn from_raw(inner: M::Ctx) -> Self {
-        Self(inner)
+        Self(UnsafeCell::new(inner))
     }
 }
 
 /// Reference to static mutable `NgxModuleCommands` object ignoring the length.
-pub struct NgxModuleCommandsRefMut<M: Module>(PhantomData<M>, StaticRefMut<[ngx_command_t]>);
-impl<M: Module> NgxModuleCommandsRefMut<M> {
+pub struct NgxModuleCommandsPtr<M: Module>(PhantomData<M>, *mut [ngx_command_t]);
+impl<M: Module> NgxModuleCommandsPtr<M> {
     /// Wrap a static mutable reference to `NgxModuleCommands` into this type.
     ///
     /// # Safety
     /// Caller must ensure that the provided reference is to static mutable.
     pub const unsafe fn from_mut<const N: usize>(
-        r: &'static mut NgxModuleCommands<M, N>,
-    ) -> NgxModuleCommandsRefMut<M> {
-        NgxModuleCommandsRefMut(PhantomData, StaticRefMut::from_mut(&mut r.0))
+        r: &'static NgxModuleCommands<M, N>,
+    ) -> NgxModuleCommandsPtr<M> {
+        NgxModuleCommandsPtr(PhantomData, r.1.get() as *mut _)
     }
 }
 
 /// Type safe wrapper of \[ngx_command_t\] by specifying `Module`.
-pub struct NgxModuleCommands<M: Module, const N: usize>([ngx_command_t; N], PhantomData<M>);
+pub struct NgxModuleCommands<M: Module, const N: usize>(
+    PhantomData<M>,
+    UnsafeCell<[ngx_command_t; N]>,
+);
 
 /// `NgxModuleCommands` builder.
-pub struct NgxModuleCommandsBuilder<M: Module, const N: usize>(ConstArrayBuilder<ngx_command_t, N>, PhantomData<M>);
+pub struct NgxModuleCommandsBuilder<M: Module, const N: usize>(
+    ConstArrayBuilder<ngx_command_t, N>,
+    PhantomData<M>,
+);
 impl<M: Module, const N: usize> Default for NgxModuleCommandsBuilder<M, N> {
     fn default() -> Self {
         Self::new()
@@ -177,7 +183,10 @@ impl<M: Module, const N: usize> NgxModuleCommandsBuilder<M, N> {
     }
     /// Build `NgxModuleCommands`.
     pub const fn build(self) -> NgxModuleCommands<M, N> {
-        NgxModuleCommands(self.0.push(ngx_null_command!()).build(), PhantomData)
+        NgxModuleCommands(
+            PhantomData,
+            UnsafeCell::new(self.0.push(ngx_command_t::empty()).build()),
+        )
     }
 }
 
@@ -196,7 +205,10 @@ pub trait Command {
     /// Arg Flags.
     const ARG_FLAG: CommandArgFlagSet;
     /// handle command directive
-    fn handler(cf: &mut ngx_conf_t, conf: &mut <Self::CallRule as CommandCallRule>::Conf) -> Result<(), CommandError>;
+    fn handler(
+        cf: &mut ngx_conf_t,
+        conf: &mut <Self::CallRule as CommandCallRule>::Conf,
+    ) -> Result<(), CommandError>;
 }
 
 /// Command call interface containing information for proper call.
@@ -226,7 +238,9 @@ impl CommandOffset {
     }
 }
 
-use crate::ffi::{NGX_CONF_TAKE1, NGX_CONF_TAKE2, NGX_HTTP_LOC_CONF, NGX_HTTP_MAIN_CONF, NGX_HTTP_SRV_CONF};
+use crate::ffi::{
+    NGX_CONF_TAKE1, NGX_CONF_TAKE2, NGX_HTTP_LOC_CONF, NGX_HTTP_MAIN_CONF, NGX_HTTP_SRV_CONF,
+};
 
 /// Flag expressing positions the command directive can appear.
 pub enum CommandContextFlag {
@@ -376,7 +390,8 @@ pub trait CycleDelegate {
         Self::exit(&mut *cycle)
     }
     /// Nullable init function pointer actually called.
-    const INIT: Option<unsafe extern "C" fn(*mut ngx_cycle_t) -> ngx_int_t> = Some(Self::init_unsafe);
+    const INIT: Option<unsafe extern "C" fn(*mut ngx_cycle_t) -> ngx_int_t> =
+        Some(Self::init_unsafe);
     /// Nullable exit function pointer actually called.
     const EXIT: Option<unsafe extern "C" fn(*mut ngx_cycle_t)> = Some(Self::exit_unsafe);
 }
@@ -437,7 +452,7 @@ pub mod __macro {
             Self(ConstArrayBuilder::new())
         }
         pub const fn add<M: Module>(mut self) -> Self {
-            self.0 = self.0.push(unsafe { &raw const M::SELF.to_ref().0 });
+            self.0 = self.0.push(&raw const *M::SELF.inner());
             self
         }
         pub const fn build(self) -> [*const ngx_module_t; N] {

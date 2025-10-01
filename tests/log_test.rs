@@ -145,8 +145,8 @@ mod tests {
         assert!(
             test_config_path.exists(),
             "Config file not found: {}\nCurrent directory: {}",
-            test_config_path.to_string_lossy(),
-            current_dir.to_string_lossy()
+            test_config_path.display(),
+            current_dir.display()
         );
 
         nginx.replace_config(&test_config_path).unwrap_or_else(|_| {

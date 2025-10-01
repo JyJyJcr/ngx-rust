@@ -83,7 +83,7 @@ impl<E: 'static + ?Sized> StaticRefMut<E> {
 
 #[cfg(test)]
 mod test {
-    use std::ptr::{addr_of, addr_of_mut};
+    use core::ptr::{addr_of, addr_of_mut};
 
     use super::{StaticRef, StaticRefMut};
 

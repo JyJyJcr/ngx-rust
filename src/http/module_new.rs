@@ -1,36 +1,37 @@
 use nginx_sys::{
-    ngx_array_push, ngx_conf_t, ngx_http_core_module, ngx_http_handler_pt, ngx_http_phases,
+    ngx_array_push, ngx_conf_t, ngx_http_handler_pt, ngx_http_phases,
     ngx_http_phases_NGX_HTTP_ACCESS_PHASE, ngx_http_phases_NGX_HTTP_CONTENT_PHASE,
     ngx_http_phases_NGX_HTTP_FIND_CONFIG_PHASE, ngx_http_phases_NGX_HTTP_LOG_PHASE,
     ngx_http_phases_NGX_HTTP_POST_ACCESS_PHASE, ngx_http_phases_NGX_HTTP_POST_READ_PHASE,
     ngx_http_phases_NGX_HTTP_POST_REWRITE_PHASE, ngx_http_phases_NGX_HTTP_PREACCESS_PHASE,
     ngx_http_phases_NGX_HTTP_PRECONTENT_PHASE, ngx_http_phases_NGX_HTTP_REWRITE_PHASE,
-    ngx_http_phases_NGX_HTTP_SERVER_REWRITE_PHASE, ngx_http_request_t, ngx_int_t, ngx_uint_t, NGX_HTTP_LOC_CONF_OFFSET,
-    NGX_HTTP_MAIN_CONF_OFFSET, NGX_HTTP_SRV_CONF_OFFSET,
+    ngx_http_phases_NGX_HTTP_SERVER_REWRITE_PHASE, ngx_http_request_t, ngx_int_t, ngx_uint_t,
+    NGX_HTTP_LOC_CONF_OFFSET, NGX_HTTP_MAIN_CONF_OFFSET, NGX_HTTP_SRV_CONF_OFFSET,
 };
 
 use crate::core::{Pool, Status, NGX_CONF_ERROR};
 use crate::ffi::{ngx_http_module_t, NGX_HTTP_MODULE};
+use crate::http::{HttpModuleMainConf, NgxHttpCoreModule};
 use crate::module::{
-    CommandCallRule, CommandCallRuleBy, CommandOffset, CycleDelegate, Module, ModuleSignature, NgxModule,
-    NgxModuleCommands, NgxModuleCommandsRefMut, NgxModuleCtx, PreCycleDelegate,
+    CommandCallRule, CommandCallRuleBy, CommandOffset, CycleDelegate, Module, ModuleSignature,
+    NgxModule, NgxModuleCommands, NgxModuleCommandsPtr, NgxModuleCtx, PreCycleDelegate,
 };
-use crate::util::StaticRefMut;
 use ::core::marker::PhantomData;
-use std::ffi::{c_char, c_void, CStr};
-use std::ptr::{addr_of, null_mut};
+use core::ffi::{c_char, c_void, CStr};
+use core::ptr::{addr_of, null_mut};
 
 use super::{Merge, MergeConfigError, Request};
 
 /// Wrapper of `HttpModule` implementing `Module`.
 pub struct HttpModuleSkel<M: HttpModule>(PhantomData<M>);
 impl<M: HttpModule> Module for HttpModuleSkel<M> {
-    const SELF: StaticRefMut<NgxModule<Self>> = unsafe { StaticRefMut::from_mut(&mut M::SELF.to_mut().0) };
+    const SELF: &'static NgxModule<Self> = unsafe { &*(M::SELF as *const _ as *const _) };
     const NAME: &'static CStr = M::NAME;
-    const TYPE: ModuleSignature = unsafe { ModuleSignature::from_ngx_uint(NGX_HTTP_MODULE as ngx_uint_t) };
+    const TYPE: ModuleSignature =
+        unsafe { ModuleSignature::from_ngx_uint(NGX_HTTP_MODULE as ngx_uint_t) };
     type Ctx = ngx_http_module_t;
-    const CTX: StaticRefMut<NgxModuleCtx<Self>> = unsafe { StaticRefMut::from_mut(&mut M::SELF.to_mut().1) };
-    const COMMANDS: NgxModuleCommandsRefMut<Self> = M::COMMANDS;
+    const CTX: &'static NgxModuleCtx<Self> = &M::SELF.1;
+    const COMMANDS: NgxModuleCommandsPtr<Self> = M::COMMANDS;
 
     type MasterInitializer = M::MasterInitializer;
     type ModuleDelegate = M::ModuleDelegate;
@@ -39,7 +40,10 @@ impl<M: HttpModule> Module for HttpModuleSkel<M> {
 }
 
 /// Type safe wrapper of `ngx_module_t` and `ngx_http_module_t` by specifying `Module`.
-pub struct NgxHttpModule<M: HttpModule>(NgxModule<HttpModuleSkel<M>>, NgxModuleCtx<HttpModuleSkel<M>>);
+pub struct NgxHttpModule<M: HttpModule>(
+    NgxModule<HttpModuleSkel<M>>,
+    NgxModuleCtx<HttpModuleSkel<M>>,
+);
 impl<M: HttpModule> Default for NgxHttpModule<M> {
     fn default() -> Self {
         Self::new()
@@ -66,16 +70,16 @@ impl<M: HttpModule> NgxHttpModule<M> {
 /// Type Alias of `NgxModuleCommands` for `HttpModule`.
 pub type NgxHttpModuleCommands<M, const N: usize> = NgxModuleCommands<HttpModuleSkel<M>, N>;
 /// Type Alias of `NgxModuleCommandsRefMut` for `HttpModule`.
-pub type NgxHttpModuleCommandsRefMut<M> = NgxModuleCommandsRefMut<HttpModuleSkel<M>>;
+pub type NgxHttpModuleCommandsPtr<M> = NgxModuleCommandsPtr<HttpModuleSkel<M>>;
 
 /// Type safe interface expressing unique Nginx Http module.
 pub trait HttpModule: Sized + 'static {
     /// Wrapper of static mutable `NgxModule` and `NgxModuleCtx` object expressing this module.
-    const SELF: StaticRefMut<NgxHttpModule<Self>>;
+    const SELF: &'static NgxHttpModule<Self>;
     /// CStr module name expression.
     const NAME: &'static CStr;
     ///  Wrapper of static mutable `NgxHttpModuleCommands` object bound to this module.
-    const COMMANDS: NgxHttpModuleCommandsRefMut<Self>;
+    const COMMANDS: NgxHttpModuleCommandsPtr<Self>;
 
     /// Type deligating `init_master` (not called now).
     type MasterInitializer: PreCycleDelegate;
@@ -111,10 +115,14 @@ pub trait ConfigurationDelegate {
     /// Callers should provide valid non-null `ngx_conf_t` arguments. Implementers must
     /// guard against null inputs or risk runtime errors.
     unsafe extern "C" fn configuration_unsafe(cf: *mut ngx_conf_t) -> ngx_int_t {
-        Self::configuration(&mut *cf).err().unwrap_or(Status::NGX_OK).into()
+        Self::configuration(&mut *cf)
+            .err()
+            .unwrap_or(Status::NGX_OK)
+            .into()
     }
     /// Nullable configuration function pointer actually called.
-    const CONFIGURATION: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> ngx_int_t> = Some(Self::configuration_unsafe);
+    const CONFIGURATION: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> ngx_int_t> =
+        Some(Self::configuration_unsafe);
 }
 
 impl ConfigurationDelegate for () {
@@ -174,9 +182,11 @@ pub trait InitConfSetting {
     }
 
     /// Nullable create function pointer actually called.
-    const CREATE: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> *mut c_void> = Some(Self::create_unsafe);
+    const CREATE: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> *mut c_void> =
+        Some(Self::create_unsafe);
     /// Nullable init function pointer actually called.
-    const INIT: Option<unsafe extern "C" fn(*mut ngx_conf_t, *mut c_void) -> *mut c_char> = Some(Self::init_unsafe);
+    const INIT: Option<unsafe extern "C" fn(*mut ngx_conf_t, *mut c_void) -> *mut c_char> =
+        Some(Self::init_unsafe);
 }
 
 /// Default implementer of `InitConfSetting` for `Conf: Default`.
@@ -212,23 +222,33 @@ pub trait MergeConfSetting {
         null_mut()
     }
     /// merge conf objects.
-    fn merge(cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ConfMergeError>;
+    fn merge(
+        cf: &mut ngx_conf_t,
+        prev: &mut Self::Conf,
+        conf: &mut Self::Conf,
+    ) -> Result<(), ConfMergeError>;
     /// Unsafe `merge` wrapper for pointer usage.
     ///
     /// # Safety
     /// Callers should provide valid non-null `ngx_conf_t` and `c_void` arguments. Implementers must
     /// guard against null inputs or risk runtime errors.
-    unsafe extern "C" fn merge_unsafe(cf: *mut ngx_conf_t, prev: *mut c_void, conf: *mut c_void) -> *mut c_char {
+    unsafe extern "C" fn merge_unsafe(
+        cf: *mut ngx_conf_t,
+        prev: *mut c_void,
+        conf: *mut c_void,
+    ) -> *mut c_char {
         if Self::merge(&mut *cf, &mut *(prev as *mut _), &mut *(conf as *mut _)).is_ok() {
             return null_mut();
         }
         NGX_CONF_ERROR as _
     }
     /// Nullable create function pointer actually called.
-    const CREATE: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> *mut c_void> = Some(Self::create_unsafe);
+    const CREATE: Option<unsafe extern "C" fn(*mut ngx_conf_t) -> *mut c_void> =
+        Some(Self::create_unsafe);
     /// Nullable merge function pointer actually called.
-    const MERGE: Option<unsafe extern "C" fn(*mut ngx_conf_t, *mut c_void, *mut c_void) -> *mut c_char> =
-        Some(Self::merge_unsafe);
+    const MERGE: Option<
+        unsafe extern "C" fn(*mut ngx_conf_t, *mut c_void, *mut c_void) -> *mut c_char,
+    > = Some(Self::merge_unsafe);
 }
 
 /// Default implementer of `InitConfSetting` for `Conf: Default + Merge`.
@@ -240,7 +260,11 @@ impl<C: Default + Merge> MergeConfSetting for DefaultMerge<C> {
         Ok(Default::default())
     }
 
-    fn merge(_cf: &mut ngx_conf_t, prev: &mut Self::Conf, conf: &mut Self::Conf) -> Result<(), ConfMergeError> {
+    fn merge(
+        _cf: &mut ngx_conf_t,
+        prev: &mut Self::Conf,
+        conf: &mut Self::Conf,
+    ) -> Result<(), ConfMergeError> {
         conf.merge(prev).map_err(|e| e.into())
     }
 }
@@ -254,7 +278,8 @@ impl<C> CommandCallRule for HttpMainConf<C> {
 impl<M: HttpModule> CommandCallRuleBy<HttpModuleSkel<M>>
     for HttpMainConf<<M::MainConfSetting as InitConfSetting>::Conf>
 {
-    const OFFSET: CommandOffset = unsafe { CommandOffset::from_ngx_uint(NGX_HTTP_MAIN_CONF_OFFSET) };
+    const OFFSET: CommandOffset =
+        unsafe { CommandOffset::from_ngx_uint(NGX_HTTP_MAIN_CONF_OFFSET) };
 }
 
 /// `CommandCallRule` implementer for `Command` configuring Http Main Conf
@@ -331,9 +356,17 @@ pub trait SetHttpHandler {
 }
 impl SetHttpHandler for ngx_conf_t {
     fn set_handler<H: HttpHandler>(&mut self) -> Result<(), Status> {
-        let conf =
-            unsafe { crate::http::ngx_http_conf_get_module_main_conf(self, &*addr_of!(ngx_http_core_module)).as_mut() }
-                .ok_or(Status::NGX_ERROR)?;
+        // let conf =
+
+        //     NgxHttpCoreModule::main_conf_mut(cf)
+        // unsafe {
+        //     crate::http::ngx_http_conf_get_module_main_conf(self, &*addr_of!(ngx_http_core_module))
+        //         .as_mut()
+        // }
+        //.ok_or(Status::NGX_ERROR)?;
+
+        let conf = NgxHttpCoreModule::main_conf_mut(self).expect("http core main conf");
+
         let pointer = unsafe {
             (ngx_array_push(&mut conf.phases[H::PHASE.into_ngx_http_phases() as usize].handlers)
                 as *mut ngx_http_handler_pt)

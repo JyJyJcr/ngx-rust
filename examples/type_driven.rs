@@ -2,13 +2,17 @@ use std::ffi::CStr;
 use std::ptr::addr_of_mut;
 
 use ngx::ffi::{ngx_conf_t, ngx_str_t};
-use ngx::http::{HttpMainConf, HttpModuleSkel};
+use ngx::http::module_new::{HttpMainConf, HttpModuleSkel};
 use ngx::module::{
-    CommandArgFlag, CommandArgFlagSet, CommandCallRule, CommandContextFlag, CommandContextFlagSet, CommandError,
+    CommandArgFlag, CommandArgFlagSet, CommandCallRule, CommandContextFlag, CommandContextFlagSet,
+    CommandError,
 };
 use ngx::{arg_flags, context_flags, exhibit_modules, ngx_string};
 use ngx::{
-    http::{DefaultInit, DefaultMerge, HttpModule, NgxHttpModule, NgxHttpModuleCommands, NgxHttpModuleCommandsRefMut},
+    http::module_new::{
+        DefaultInit, DefaultMerge, HttpModule, NgxHttpModule, NgxHttpModuleCommands,
+        NgxHttpModuleCommandsPtr,
+    },
     module::{Command, NgxModuleCommandsBuilder},
     util::StaticRefMut,
 };
@@ -26,9 +30,15 @@ impl HttpModule for FooBarHttpModule {
     const NAME: &'static CStr = c"foo_bar_module";
 
     const COMMANDS: NgxHttpModuleCommandsRefMut<Self> = {
-        static mut FOO_BAR_HTTP_MODULE_COMMANDS: NgxHttpModuleCommands<FooBarHttpModule, { 1 + 1 }> =
-            NgxModuleCommandsBuilder::new().add::<FooBarCommand>().build();
-        unsafe { NgxHttpModuleCommandsRefMut::from_mut(&mut *addr_of_mut!(FOO_BAR_HTTP_MODULE_COMMANDS)) }
+        static mut FOO_BAR_HTTP_MODULE_COMMANDS: NgxHttpModuleCommands<
+            FooBarHttpModule,
+            { 1 + 1 },
+        > = NgxModuleCommandsBuilder::new()
+            .add::<FooBarCommand>()
+            .build();
+        unsafe {
+            NgxHttpModuleCommandsRefMut::from_mut(&mut *addr_of_mut!(FOO_BAR_HTTP_MODULE_COMMANDS))
+        }
     };
 
     type MasterInitializer = ();
@@ -62,7 +72,10 @@ impl Command for FooBarCommand {
 
     const ARG_FLAG: CommandArgFlagSet = arg_flags!(CommandArgFlag::Take1, CommandArgFlag::Take2);
 
-    fn handler(_cf: &mut ngx_conf_t, conf: &mut <Self::CallRule as CommandCallRule>::Conf) -> Result<(), CommandError> {
+    fn handler(
+        _cf: &mut ngx_conf_t,
+        conf: &mut <Self::CallRule as CommandCallRule>::Conf,
+    ) -> Result<(), CommandError> {
         *conf += 1;
         Ok(())
     }

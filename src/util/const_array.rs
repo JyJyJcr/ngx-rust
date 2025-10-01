@@ -1,4 +1,4 @@
-use std::mem::{ManuallyDrop, MaybeUninit};
+use core::mem::{ManuallyDrop, MaybeUninit};
 
 /// Array builder available in compile time.
 pub struct ConstArrayBuilder<T, const N: usize> {
